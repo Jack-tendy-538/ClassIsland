@@ -5,6 +5,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using ClassIsland.Core.Enums;
 using ClassIsland.Shared;
+using ClassIsland.Core.Search;
 
 namespace ClassIsland.Core;
 
@@ -129,6 +130,11 @@ public abstract class AppBase : Application, IAppHost
     /// 应用当前的主窗口
     /// </summary>
     public Window? MainWindow { get; internal set; }
+
+    /// <summary>
+    /// 应用设置搜索服务索引（全局单例）
+    /// </summary>
+    public static SettingSearchService SettingSearch { get; } = new SettingSearchService();
 
     /// <summary>
     /// 桌面生命周期对象
