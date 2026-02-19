@@ -83,6 +83,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     public static readonly string StartupSettingsPage = "general";
 
     private IComponentsService ComponentsService { get; }
+    private ITutorialService TutorialService { get; }
 
     private string LaunchSettingsPage { get; set; } = StartupSettingsPage;
 
@@ -102,12 +103,14 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
     public SettingsWindowNew(IManagementService managementService, IHangService hangService,
         ILogger<SettingsWindowNew> logger, DiagnosticService diagnosticService, SettingsService settingsService,
-        IComponentsService componentsService, IUriNavigationService uriNavigationService)
+        IComponentsService componentsService, IUriNavigationService uriNavigationService,
+        ITutorialService tutorialService)
     {
         Logger = logger;
         DataContext = this;
         ManagementService = managementService;
         ComponentsService = componentsService;
+        TutorialService = tutorialService;
         DiagnosticService = diagnosticService;
         HangService = hangService;
         SettingsService = settingsService;
@@ -473,6 +476,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
             Activate();
         }
+        TutorialService.PushToNextSentence("classisland.getStarted.welcome/systems");
     }
 
     public async void Open(string key, Uri? uri = null)
