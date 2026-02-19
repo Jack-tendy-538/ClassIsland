@@ -15,6 +15,7 @@ using ClassIsland.Core.Abstractions.Services.Management;
 using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Enums.SettingsWindow;
 using ClassIsland.Core.Services.Registry;
+using ClassIsland.Core.Search;
 using ClassIsland.Shared;
 using ClassIsland.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -869,5 +870,19 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     private void Control_OnLoaded(object? sender, RoutedEventArgs e)
     {   
         
+    }
+
+    private async void SearchBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is Avalonia.Labs.Input.AutoSuggestBox searchBox && searchBox.SelectedItem is SettingSearchItem item)
+        {
+            var pageInfo = SettingsWindowRegistryService.Registered.FirstOrDefault(x => x.Id == item.Id);
+            if (pageInfo != null)
+            {
+                await CoreNavigate(pageInfo);
+                searchBox.Text = ""; // Clear the search box after navigation
+                searchBox.SelectedItem = null; // Clear selection
+            }
+        }
     }
 }

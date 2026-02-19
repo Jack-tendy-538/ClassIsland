@@ -157,6 +157,31 @@
                                    IsHitTestVisible="False"
                                    VerticalAlignment="Center"
                                    Classes="custom-titlebar-only"/>
+                        <controls3:AutoSuggestBox Grid.Column="2" 
+                                                  Margin="8 0"
+                                                  Width="200"
+                                                  PlaceholderText="搜索设置..."
+                                                  Text="{Binding ViewModel.SearchQuery, Mode=TwoWay}"
+                                                  ItemsSource="{Binding ViewModel.SearchResults}"
+                                                  QueryIcon="{controls:FluentIcon &#xE721;}"
+                                                  SelectionChanged="SearchBox_OnSelectionChanged"
+                                                  x:Name="SearchBox">
+                            <controls3:AutoSuggestBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <commands:FluentIcon Glyph="{Binding IconGlyph}" 
+                                                             VerticalAlignment="Center" 
+                                                             Margin="0 0 8 0"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Description}" 
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" 
+                                                       FontSize="12"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </controls3:AutoSuggestBox.ItemTemplate>
+                        </controls3:AutoSuggestBox>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal"

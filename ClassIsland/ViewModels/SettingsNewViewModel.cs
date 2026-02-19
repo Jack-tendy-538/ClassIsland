@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ClassIsland.Core.Attributes;
+using ClassIsland.Core.Search;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FluentAvalonia.UI.Controls;
 
@@ -24,6 +25,8 @@ public class SettingsNewViewModel : ObservableRecipient
     private List<string> _echoCaveTextsAll = [];
     private bool _isCoverVisible = true;
     private ObservableCollection<NavigationViewItemBase> _flattenNavigationItemsCache = [];
+    private string _searchQuery = "";
+    private ObservableCollection<SettingSearchItem> _searchResults = [];
 
     public object? FrameContent
     {
@@ -202,6 +205,44 @@ public class SettingsNewViewModel : ObservableRecipient
             if (Equals(value, _flattenNavigationItemsCache)) return;
             _flattenNavigationItemsCache = value;
             OnPropertyChanged();
+        }
+    }
+
+    public string SearchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            if (value == _searchQuery) return;
+            _searchQuery = value;
+            OnPropertyChanged();
+            PerformSearch();
+        }
+    }
+
+    public ObservableCollection<SettingSearchItem> SearchResults
+    {
+        get => _searchResults;
+        set
+        {
+            if (Equals(value, _searchResults)) return;
+            _searchResults = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public void PerformSearch()
+    {
+        SearchResults.Clear();
+        if (string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            return;
+        }
+
+        var results = ClassIsland.Core.AppBase.SettingSearch.Search(SearchQuery);
+        foreach (var item in results)
+        {
+            SearchResults.Add(item);
         }
     }
 }
