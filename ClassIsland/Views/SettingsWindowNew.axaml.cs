@@ -90,7 +90,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     private bool _isFirstNavigated = false;
 
     private readonly Dictionary<string, SettingsPageBase?> _cachedPages = new();
-    
+
+    // 手动添加的控件字段（解决自动生成失败问题）
+    // private NavigationView NavigationView;
+    // private Frame NavigationFrame;
+
     public static readonly FuncValueConverter<object?, double> ControlToWidthConverter = new(x =>
     {
         if (x is Control control)
@@ -143,6 +147,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         }
     }
 
+    private void InitializeComponent()
+    {
+        throw new NotImplementedException();
+    }
+
     private void BuildNavigationMenuItems()
     {
         NavigationView.MenuItems.Clear();
@@ -151,7 +160,6 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         var infosBase = SettingsWindowRegistryService.Registered
             .Where(x => !x.HideDefault)
             .Where(x => !(ManagementService.Policy.DisableSettingsEditing && x.Category == SettingsPageCategory.Internal))
-            .Where(x => !(ManagementService.Policy.DisableSettingsEditing && x.Category == SettingsPageCategory.External))
             .Where(x => !(ManagementService.Policy.DisableSettingsEditing && x.Category == SettingsPageCategory.External))
             .Where(x => !(ManagementService.Policy.DisableDebugMenu && x.Category == SettingsPageCategory.Debug))
             .Where(x => !(!SettingsService.Settings.IsDebugOptionsEnabled && x.Category == SettingsPageCategory.Debug))
@@ -177,7 +185,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
                 if (i.GroupId != null && SettingsWindowRegistryService.Groups.TryGetValue(i.GroupId, out var group))
                 {
-                    
+
                     item = new NavigationViewItem()
                     {
                         IconSource = group.IconSource,
@@ -213,16 +221,16 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                     };
                     ViewModel.FlattenNavigationItemsCache.Add(item);
                 }
-                
+
                 NavigationView.MenuItems.Add(item);
-                
+
             }
-            
+
             if (info == infos.Last())
             {
                 continue;
             }
-            
+
             NavigationView.MenuItems.Add(new NavigationViewItemSeparator());
         }
     }
@@ -237,7 +245,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
     private void SettingsOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        
+
     }
 
     protected override async void OnOpened(EventArgs e)
@@ -376,7 +384,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             {
                 await UpdateEchoCaveAsync();
             }
-            
+
             HangService.AssumeHang();
             // 清空抽屉
             ViewModel.IsDrawerOpen = false;
@@ -390,10 +398,6 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             var data = new SettingsWindowNavigationData(true, uri != null, uri, keepHistory, transaction, spanLoadPhase2, info);
             NavigationFrame.NavigateFromObject(data);
             //ViewModel.FrameContent;
-            if (!keepHistory)
-            {
-                NavigationFrame.BackStack.Clear();
-            }
             spanLoadPhase1.Finish(SpanStatus.Ok);
         }
         catch (Exception ex)
@@ -765,7 +769,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         {
             this.ShowErrorToast("无法创建快捷换课图标", exception);
         }
-        
+
     }
 
     private async void MenuItemRestartToRecovery_OnClick(object sender, RoutedEventArgs e)
@@ -865,7 +869,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                 NavigationView.SelectedItem = item;
             });
         }
-        
+
         foreach (var i in ViewModel.FlattenNavigationItemsCache.Where(x => !Equals(x.Tag, info)))
         {
             i.IsSelected = false;
@@ -873,20 +877,21 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     }
 
     private void Control_OnLoaded(object? sender, RoutedEventArgs e)
-    {   
-        
+    {
+
     }
 
+    // 使用 AutoCompleteBox 的 SelectionChanged 事件处理
     private async void SearchBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is Avalonia.Labs.Input.AutoSuggestBox searchBox && searchBox.SelectedItem is SettingSearchItem item)
+        if (sender is AutoCompleteBox autoCompleteBox && autoCompleteBox.SelectedItem is SettingSearchItem item)
         {
             var pageInfo = SettingsWindowRegistryService.Registered.FirstOrDefault(x => x.Id == item.Id);
             if (pageInfo != null)
             {
                 await CoreNavigate(pageInfo);
-                searchBox.Text = ""; // Clear the search box after navigation
-                searchBox.SelectedItem = null; // Clear selection
+                autoCompleteBox.Text = ""; // 清空文本框
+                autoCompleteBox.SelectedItem = null; // 清除选中项
             }
         }
     }
