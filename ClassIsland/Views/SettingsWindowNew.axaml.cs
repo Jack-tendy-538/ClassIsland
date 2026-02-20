@@ -133,6 +133,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             .ObservableForProperty(x => x.IsDebugOptionsEnabled)
             .Subscribe(_ => BuildNavigationMenuItems());
 
+        TitleBar.Height = 48;
         if (OperatingSystem.IsMacOS())
         {
             ExtendClientAreaToDecorationsHint = true;
