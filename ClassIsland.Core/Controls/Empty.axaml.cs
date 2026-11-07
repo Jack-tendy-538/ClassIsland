@@ -10,13 +10,20 @@ namespace ClassIsland.Core.Controls;
 /// </summary>
 public class Empty : TemplatedControl
 {
-    public static readonly StyledProperty<IconSource> IconProperty = AvaloniaProperty.Register<Empty, IconSource>(
-        nameof(Icon), new FluentIconSource("\ue262")
+    public static readonly StyledProperty<FAIconSource> IconProperty = AvaloniaProperty.Register<Empty, FAIconSource>(
+        nameof(Icon));
+
+    public Empty()
+    {
+        // FAIconSource retains the icon elements created from it. A StyledProperty default is static metadata,
+        // so sharing one source here would keep every Empty control (and its visual tree) alive.
+        SetCurrentValue(IconProperty, new FluentIconSource("\ue262")
         {
             FontSize = 64
         });
+    }
 
-    public IconSource Icon
+    public FAIconSource Icon
     {
         get => GetValue(IconProperty);
         set => SetValue(IconProperty, value);

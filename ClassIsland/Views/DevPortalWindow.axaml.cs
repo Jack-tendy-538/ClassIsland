@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using ClassIsland.Controls;
+using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Controls;
 using ClassIsland.Core.Enums.Tutorial;
@@ -13,13 +14,14 @@ using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Models.Notification;
 using ClassIsland.Core.Models.Tutorial;
 using ClassIsland.Core.Models.UI;
+using ClassIsland.Core.Services.UI;
 using ClassIsland.Shared;
 using ClassIsland.ViewModels;
 using FluentAvalonia.UI.Controls;
 
 namespace ClassIsland.Views;
 
-public partial class DevPortalWindow : MyWindow
+public partial class DevPortalWindow : ViewBase
 {
     public DevPortalViewModel ViewModel { get; } = IAppHost.GetService<DevPortalViewModel>();
     
@@ -30,6 +32,9 @@ public partial class DevPortalWindow : MyWindow
         
         MarkdownEditor.Text = ViewModel.MarkdownText;
     }
+
+    private void FontProbe_OnLoaded(object? sender, RoutedEventArgs e) =>
+        ViewModel.RefreshFontProbeCommand.Execute(null);
 
     private void ButtonSendNotification_OnClick(object? sender, RoutedEventArgs e)
     {
@@ -71,6 +76,28 @@ public partial class DevPortalWindow : MyWindow
     {
         ViewModel.TargetTime = ViewModel.ExactTimeService.GetCurrentLocalDateTime().TimeOfDay;
         ViewModel.IsTargetTimeLoaded = true;
+    }
+
+    private void ButtonJumpToPreparingNotification_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var target = ViewModel.GetPreparingNotificationTargetTime(
+            IAppHost.GetService<ILessonsService>(), IAppHost.GetService<IProfileService>());
+        if (target == null)
+        {
+            this.ShowToast(new ToastMessage
+            {
+                Title = "无法跳转",
+                Message = "当天没有可触发即将上课提醒的课程。请检查课表、提醒开关和提前提醒时间。"
+            });
+            return;
+        }
+
+        ViewModel.IsTargetDateLoaded = ViewModel.IsTargetTimeLoaded = false;
+        ViewModel.SettingsService.Settings.DebugTimeOffsetSeconds +=
+            (target.Value - ViewModel.ExactTimeService.GetCurrentLocalDateTime()).TotalSeconds;
+        ViewModel.TargetDate = target.Value.Date;
+        ViewModel.TargetTime = target.Value.TimeOfDay;
+        ViewModel.IsTargetDateLoaded = ViewModel.IsTargetTimeLoaded = true;
     }
 
     private void TimePicker_OnSelectedTimeChanged(object? sender, TimePickerSelectedValueChangedEventArgs e)
@@ -197,5 +224,11 @@ public partial class DevPortalWindow : MyWindow
     {
         ViewModel.SplashProvider?.EndSplash();
         ViewModel.SplashProvider = null;
+    }
+
+    private void ButtonTestMve_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var view = new MveTestView();
+        view.Show();
     }
 }

@@ -6,18 +6,26 @@
                   DataType="{x:Type templates:TwoIconsMaskTemplateData}">
         <StackPanel Orientation="Horizontal" 
                     VerticalAlignment="Center" HorizontalAlignment="Center">
-            <controls:IconSourceElement IconSource="{Binding LeftIconSource}" 
+            <controls:FAIconSourceElement IconSource="{Binding LeftIconSource}" 
+                                        IsVisible="{Binding LeftIconSource, Converter={x:Static ObjectConverters.IsNotNull}}"
                                         VerticalAlignment="Center"
                                         Classes="repair-fontsize"
                                         TextElement.FontSize="20"
                                         Height="20" Width="20"/>
             <TextBlock Text="{Binding Text}" FontSize="{DynamicResource MainWindowEmphasizedFontSize}" 
                        Margin="8 0" FontWeight="Bold"/>
-            <controls:IconSourceElement IconSource="{Binding RightIconSource}" 
+            <controls:FAIconSourceElement IconSource="{Binding RightIconSource}" 
                                         VerticalAlignment="Center"
                                         Classes="repair-fontsize"
                                         TextElement.FontSize="20"
-                                        Height="20" Width="20"/>
+                                        Height="20" Width="20">
+                <controls:FAIconSourceElement.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="HasRightIcon" />
+                        <Binding Path="RightIconSource" Converter="{x:Static ObjectConverters.IsNotNull}" />
+                    </MultiBinding>
+                </controls:FAIconSourceElement.IsVisible>
+            </controls:FAIconSourceElement>
         </StackPanel>
     </DataTemplate>
 </ResourceDictionary>

@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Abstractions.Services.Management;
+using ClassIsland.Core.Extensions.UI;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Models.Profile;
 using ClassIsland.ViewModels;
@@ -126,15 +127,15 @@ public sealed partial class ClassPlanGroupItemControl : UserControl, INotifyProp
 
     private async void MenuItemDisband_OnClick(object sender, RoutedEventArgs e)
     {
-        var result = await new ContentDialog()
+        var result = await new FAContentDialog()
         {
             Title = "解散课表群",
             Content = this.FindResource("DisbandConfirmDialog"),
             PrimaryButtonText = "解散",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync(TopLevel.GetTopLevel(this));
-        if (result != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (result != FAContentDialogResult.Primary)
         {
             return;
         }
@@ -144,15 +145,15 @@ public sealed partial class ClassPlanGroupItemControl : UserControl, INotifyProp
 
     private async void MenuItemDelete_OnClick(object sender, RoutedEventArgs e)
     {
-        var result = await new ContentDialog()
+        var result = await new FAContentDialog()
         {
             Title = "解散课表群",
             Content = this.FindResource("DeleteConfirmDialog"),
             PrimaryButtonText = "删除",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync(TopLevel.GetTopLevel(this));
-        if (result != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (result != FAContentDialogResult.Primary)
         {
             return;
         }

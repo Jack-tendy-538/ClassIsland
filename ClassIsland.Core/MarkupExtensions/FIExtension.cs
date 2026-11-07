@@ -1,4 +1,5 @@
 using Avalonia.Markup.Xaml;
+using Avalonia.Metadata;
 using ClassIsland.Core.Icons;
 
 namespace ClassIsland.Core.MarkupExtensions;

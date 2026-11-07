@@ -10,6 +10,7 @@ using Avalonia.Interactivity;
 using Avalonia.Labs.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using ClassIsland.Core.Extensions.UI;
 using Avalonia.Xaml.Interactions.DragAndDrop;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Abstractions.Services;
@@ -20,6 +21,7 @@ using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Models.Components;
 using ClassIsland.Core.Models.UI;
 using ClassIsland.Core.Services.Registry;
+using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Services;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Helpers;
@@ -263,11 +265,7 @@ public partial class EditModeView : UserControl
 
     private void ButtonOpenComponentLayoutsFolder_OnClick(object? sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = Path.GetFullPath(ClassIsland.Services.ComponentsService.ComponentSettingsPath),
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(ComponentsService.ComponentSettingsPath);
     }
 
     private async void ButtonCreateComponentLayout_OnClick(object? sender, RoutedEventArgs e)
@@ -278,10 +276,10 @@ public partial class EditModeView : UserControl
         {
             Text = ""
         };
-        var dialogResult = await new ContentDialog()
+        var dialogResult = await new FAContentDialog()
         {
             Title = "创建组件配置",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonText = "创建",
             SecondaryButtonText = "取消",
             Content = new Field()
@@ -290,12 +288,12 @@ public partial class EditModeView : UserControl
                 Label = "组件名",
                 Suffix = ".json"
             }
-        }.ShowAsync();
+        }.ShowAsyncAuto();
 
         ViewModel.CreateProfileName = textBox.Text;
         var path = Path.Combine(ClassIsland.Services.ComponentsService.ComponentSettingsPath,
             ViewModel.CreateProfileName + ".json");
-        if (dialogResult != ContentDialogResult.Primary || File.Exists(path))
+        if (dialogResult != FAContentDialogResult.Primary || File.Exists(path))
         {
             return;
         }
@@ -325,22 +323,22 @@ public partial class EditModeView : UserControl
         {
             this.ShowToast(new ToastMessage("无法删除已加载或将要加载的组件配置。")
             {
-                Severity = InfoBarSeverity.Warning
+                Severity = FAInfoBarSeverity.Warning
             });
             return;
         }
 
         var textBox = new TextBox();
-        var r = await new ContentDialog()
+        var r = await new FAContentDialog()
         {
             Title = "删除组件配置",
             Content = $"您确定要删除组件配置 {name} 吗？此操作无法撤销，组件配置内的组件信息都将被删除！",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonText = "删除",
             SecondaryButtonText = "取消"
-        }.ShowAsync();
+        }.ShowAsyncAuto();
 
-        if (r == ContentDialogResult.Primary)
+        if (r == FAContentDialogResult.Primary)
         {
             File.Delete(path);
         }
@@ -355,7 +353,7 @@ public partial class EditModeView : UserControl
         {
             Text = name
         };
-        var r = await new ContentDialog()
+        var r = await new FAContentDialog()
         {
             Title = "重命名组件配置方案",
             Content = new Field()
@@ -364,14 +362,14 @@ public partial class EditModeView : UserControl
                 Label = "组件配置方案名称",
                 Suffix = ".json"
             },
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonText = "重命名",
             SecondaryButtonText = "取消"
-        }.ShowAsync();
+        }.ShowAsyncAuto();
 
         var raw = Path.Combine(Services.ComponentsService.ComponentSettingsPath, $"{name}.json");
         var path = Path.Combine(Services.ComponentsService.ComponentSettingsPath, $"{textBox.Text}.json");
-        if (r != ContentDialogResult.Primary || !File.Exists(raw))
+        if (r != FAContentDialogResult.Primary || !File.Exists(raw))
         {
             return;
         }
@@ -381,7 +379,7 @@ public partial class EditModeView : UserControl
             this.ShowToast(new ToastMessage()
             {
                 Message = "无法重命名组件配置，因为已存在一个相同名称的组件配置。",
-                Severity = InfoBarSeverity.Warning
+                Severity = FAInfoBarSeverity.Warning
             });
             return;
         }

@@ -34,7 +34,7 @@ public partial class TutorialSentence : ObservableObject, IXmlnsAttached
     /// <summary>
     /// 语句图标
     /// </summary>
-    [JsonIgnore] public IconSource? IconSource => IconExpressionHelper.TryParseOrNull(IconExpression);
+    [JsonIgnore] public FAIconSource? IconSource => IconExpressionHelper.TryParseOrNull(IconExpression);
 
     /// <summary>
     /// 语句头图
@@ -128,7 +128,7 @@ public partial class TutorialSentence : ObservableObject, IXmlnsAttached
     /// 教学提示拜访位置
     /// </summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    [ObservableProperty] private TeachingTipPlacementMode _placementMode;
+    [ObservableProperty] private FATeachingTipPlacementMode _placementMode;
     
     [ObservableProperty] private IDictionary<string, string> _xmlns = new Dictionary<string, string>();
 }

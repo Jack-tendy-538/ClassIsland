@@ -4,21 +4,21 @@
         xmlns:core="clr-namespace:FluentAvalonia.Core;assembly=FluentAvalonia">
     <Design.PreviewWith>
         <Border Padding="50" Width="600" Height="300" Background="Black"> 
-            <controls:TeachingTip Title="Change themes without hassle"
+            <controls:FATeachingTip Title="Change themes without hassle"
                                   Classes="sr-accent"
                                   Subtitle="It's easier than ever to see control samples in both light and dark themes!"
                                   IconSource="Refresh" IsLightDismissEnabled="False"
                                   IsOpen="True" HeroContentPlacement="Auto" 
                                   
-                            core:VisualStateHelper.ForcedClassesProperty=":bottom">
-                <controls:TeachingTip.HeroContent>
+                            core:FAVisualStateHelper.ForcedClassesProperty=":bottom">
+                <controls:FATeachingTip.HeroContent>
                     <Border Width="100" Height="100" Background="Red" />
-                </controls:TeachingTip.HeroContent>
-            </controls:TeachingTip>
+                </controls:FATeachingTip.HeroContent>
+            </controls:FATeachingTip>
         </Border>
     </Design.PreviewWith>
 
-    <Style Selector="controls|TeachingTip.sr-accent">
+    <Style Selector="controls|FATeachingTip.sr-accent">
         <Style.Resources>
             <ControlTheme x:Key="MyActionButtonTheme" BasedOn="{StaticResource {x:Type Button}}"
                           TargetType="Button">

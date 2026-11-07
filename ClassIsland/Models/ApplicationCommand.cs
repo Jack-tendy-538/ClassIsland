@@ -40,6 +40,8 @@ public class ApplicationCommand
 
     public bool Recovery { get; set; } = false;
 
+    public bool RecoverBackup { get; set; } = false;
+
     public bool Diagnostic { get; set; } = false;
     public bool Safe { get; set; } = false;
 
@@ -59,4 +61,5 @@ public class ApplicationCommand
     public bool Onboarding { get; set; } = false;
 
     public bool Autostartup { get; set; } = false;
+    public bool Mobile { get; set; } = false;
 }

@@ -1,7 +1,12 @@
 {
   "profiles": {
     "ClassIsland": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "debugEngines": "managed,native"
+    },
+    "ClassIsland (Mobile)": {
+      "commandName": "Project",
+      "commandLineArgs": "--mobile"
     },
     "Remote": {
       "commandName": "Project",

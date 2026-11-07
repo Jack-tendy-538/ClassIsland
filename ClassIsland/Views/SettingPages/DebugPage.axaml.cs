@@ -10,6 +10,7 @@ using Avalonia.Interactivity;
 using ClassIsland.Converters;
 using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Controls;
+using ClassIsland.Core.Extensions.UI;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Abstractions.Services.Management;
 using ClassIsland.Core.Attributes;
@@ -107,7 +108,7 @@ public partial class DebugPage : SettingsPageBase
     private async void MenuItemOverwriteSettingsVersion_OnClick(object sender, RoutedEventArgs e)
     {
         var textBox = new TextBox();
-        var result = await new ContentDialog()
+        var result = await new FAContentDialog()
         {
             Title = "修改设置版本",
             Content = new StackPanel() {
@@ -122,9 +123,9 @@ public partial class DebugPage : SettingsPageBase
             },
             PrimaryButtonText = "确定",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync();
-        if (result != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto();
+        if (result != FAContentDialogResult.Primary)
         {
             return;
         }
@@ -166,14 +167,14 @@ public partial class DebugPage : SettingsPageBase
     private async void MenuItemOpenMdDocs_OnClick(object sender, RoutedEventArgs e)
     {
         var textBox = new TextBox();
-        var result = await new ContentDialog()
+        var result = await new FAContentDialog()
         {
             Title = "文档 Uri",
             Content = textBox,
             PrimaryButtonText = "确定",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync();
-        if (result != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto();
+        if (result != FAContentDialogResult.Primary)
         {
             return;
         }

@@ -5,7 +5,8 @@
         xmlns:windowing="clr-namespace:FluentAvalonia.UI.Windowing;assembly=FluentAvalonia"
         xmlns:ci="http://classisland.tech/schemas/xaml/core"
         xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
-        xmlns:themes="clr-namespace:ClassIsland.Core.Themes">
+        xmlns:themes="clr-namespace:ClassIsland.Core.Themes"
+        xmlns:controls1="clr-namespace:SmoothScroll.Avalonia.Controls;assembly=SmoothScroll.Avalonia.Controls">
     <Styles.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -25,11 +26,15 @@
 
     <StyleInclude Source="avares://AsyncImageLoader.Avalonia/AdvancedImage.axaml" />
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <!-- <controls1:ScrollViewerSmoothTheme /> -->
+    <!-- <controls1:ScrollViewDefaultTheme /> -->
 
     <StyleInclude Source="/Controls/Field.axaml"/>
     <StyleInclude Source="/Controls/Emptiable.axaml"/>
     <StyleInclude Source="/Controls/Empty.axaml"/>
     <StyleInclude Source="/Controls/Shimmer.axaml"/>
+    <StyleInclude Source="/Controls/ExpressiveLoadingIndicator.axaml" />
+    <StyleInclude Source="/Controls/AdaptiveNavigationView.axaml" />
     <StyleInclude Source="/Controls/AnimatedIconButton.axaml" />
     <StyleInclude Source="/Themes/StackPanelIntroAnimation.axaml"/>
     <StyleInclude Source="/Themes/RichTextStyles.axaml"/>
@@ -44,6 +49,9 @@
     <StyleInclude Source="/Themes/NavigationBackButton.axaml"/>
     <StyleInclude Source="/Themes/TabControlWithBarrier.axaml"/>
     <StyleInclude Source="/Themes/MyTeachingTipStyles.axaml"/>
+    <StyleInclude Source="/Themes/PlatformFeedbackStyles.axaml"/>
+    <StyleInclude Source="/Themes/MyNavigationPageStyles.axaml"/>
+    <StyleInclude Source="/Themes/PopupBaseStyles.axaml"/>
     <StyleInclude Source="/Controls/Thing.axaml"/>
     <StyleInclude Source="/Controls/DrawerHost.axaml"/>
     <StyleInclude Source="/Controls/TouchDragThumb.axaml"/>
@@ -51,11 +59,20 @@
     <StyleInclude Source="/Controls/StickerControl.axaml"/>
     <StyleInclude Source="/Controls/StickyScrollViewer.axaml"/>
     <StyleInclude Source="/Controls/VerticalDrawer.axaml"/>
+    <StyleInclude Source="/Controls/Lazy.axaml"/>
     <StyleInclude Source="/Controls/IconSources/AdvacnedImageIcon.axaml"/>
     
     <themes:NativeMenuIconsStyle/>
 
     <!-- Add Styles Here -->
+
+    <Style Selector=":is(ScrollViewer)">
+        <Setter Property="ci:ScrollViewerAssist.IsOverScrollAnimationEnabled" Value="True"/>
+    </Style>
+
+    <Style Selector="Viewbox">
+        <Setter Property="ci:ViewboxLogicalTreeAssist.IsEnabled" Value="True"/>
+    </Style>
 
     <!--日历选择器文字偏移修复-->
     <Style Selector="CalendarDatePicker">
@@ -76,14 +93,14 @@
         <Setter Property="Spacing" Value="4"/>
     </Style>
 
-    <Style Selector="controls|FontIcon.fi, ci|FluentIcon">
+    <Style Selector="controls|FAFontIcon.fi, ci|FluentIcon">
         <Setter Property="FontFamily" Value="{StaticResource FluentIcons}"/>
     </Style>
 
-    <Style Selector="controls|SettingsExpander.switcher">
+    <Style Selector="controls|FASettingsExpander.switcher">
         <Setter Property="FooterTemplate" Value="{StaticResource SwitcherTemplate}"/>
     </Style>
-    <Style Selector="controls|SettingsExpanderItem.switcher">
+    <Style Selector="controls|FASettingsExpanderItem.switcher">
         <Setter Property="FooterTemplate" Value="{StaticResource SwitcherTemplate}"/>
     </Style>
 
@@ -97,7 +114,7 @@
         <Setter Property="OffContent" Value="关"/>
     </Style>
 
-    <Style Selector="controls|SettingsExpanderItem">
+    <Style Selector="controls|FASettingsExpanderItem">
         <Style Selector="^ ToggleSwitch">
             <Setter Property="Margin" Value="0 -12"/>
             <Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
@@ -167,7 +184,7 @@
         </Style>
     </Style>
 
-    <Style Selector="controls|CommandBar.hide-popup-indicator controls|CommandBarButton:labelright /template/ controls|FontIcon#SubItemChevron">
+    <Style Selector="controls|FACommandBar.hide-popup-indicator controls|FACommandBarButton:labelright /template/ controls|FAFontIcon#SubItemChevron">
         <Setter Property="IsVisible" Value="False"/>
     </Style>
     <Style Selector=":is(Control).hidden">
@@ -223,7 +240,7 @@
         </Style>
     </Style>
 
-    <Style Selector="controls|SettingsExpander.no-radius">
+    <Style Selector="controls|FASettingsExpander.no-radius">
         <Style Selector="^">
             <Setter Property="CornerRadius" Value="0"/>
         </Style>
@@ -233,14 +250,14 @@
         <Style Selector="^ /template/ ToggleButton#ToggleButton">
             <Setter Property="CornerRadius" Value="0"/>
         </Style>
-        <Style Selector="^ /template/ controls|SettingsExpanderItem /template/ Border#Root">
+        <Style Selector="^ /template/ controls|FASettingsExpanderItem /template/ Border#Root">
             <Setter Property="CornerRadius" Value="0"/>
         </Style>
         <Style Selector="^ /template/ Expander#Expander /template/ ToggleButton /template/ Border#Root">
             <Setter Property="CornerRadius" Value="0"/>
         </Style>
     </Style>
-    <Style Selector="controls|SettingsExpanderItem.no-radius /template/ Border#Root">
+    <Style Selector="controls|FASettingsExpanderItem.no-radius /template/ Border#Root">
         <Setter Property="CornerRadius" Value="0"/>
     </Style>
 
@@ -253,10 +270,10 @@
     </Style>
 
     <Style Selector="StackPanel.cardContainer">
-        <Style Selector="^> controls|SettingsExpanderItem:nth-child(1) /template/ Border#Root">
+        <Style Selector="^> controls|FASettingsExpanderItem:nth-child(1) /template/ Border#Root">
             <Setter Property="CornerRadius" Value="4 4 0 0"/>
         </Style>
-        <Style Selector="^> controls|SettingsExpanderItem:nth-child(1):nth-last-child(1) /template/ Border#Root">
+        <Style Selector="^> controls|FASettingsExpanderItem:nth-child(1):nth-last-child(1) /template/ Border#Root">
             <Setter Property="CornerRadius" Value="4"/>
         </Style>
         <Setter Property="Spacing" Value="1"/>
@@ -267,11 +284,14 @@
         <Setter Property="ShowTitle" Value="True"/>
     </Style>
     
-    <Style Selector="controls|MenuFlyoutSubItem">
+    <Style Selector="controls|FAMenuFlyoutSubItem">
         <Setter Property="ci:FaMenuFlyoutSubItemTouchFixAssist.IsRepairApplied" Value="True"/>
     </Style>
     
-    <Style Selector=":is(windowing|AppWindow):not(:windows) :is(Control).custom-titlebar-only">
+    <Style Selector=":is(windowing|FAAppWindow):not(:windows) :is(Control).custom-titlebar-only">
+        <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector=":mobile :is(Control).custom-titlebar-only">
         <Setter Property="IsVisible" Value="False"/>
     </Style>
     
@@ -288,14 +308,17 @@
     </Style>
     
     <Style Selector="Border.popup-bg">
-        <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="12"/>
         <Setter Property="CornerRadius" Value="6"/>
+        
+        <Style Selector="^:not(.no-bg)">
+            <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"/>
+        </Style>
     </Style>
     
-    <Style Selector="controls|TeachingTip /template/ ContentPresenter#IconPresenter">
+    <Style Selector="controls|FATeachingTip /template/ ContentPresenter#IconPresenter">
         <Setter Property="MaxWidth" Value="60"/>
         <Setter Property="MaxHeight" Value="60"/>
     </Style>
@@ -303,6 +326,14 @@
     <Style Selector=":is(Button).foreground-accent /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource CustomizedAccentBarBackground1Brush}" />
         <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    
+    <Style Selector=":is(controls1|ScrollPresenter)">
+        <Setter Property="ci:ScrollPresenterAnimationAssist.IsTeleportationScrollEnabled" Value="True"/>
+    </Style>
+    
+    <Style Selector=":is(ListBoxItem)">
+        <Setter Property="ci:ControlCompositionFadeInAssist.IsFadeInEnabled" Value="True"/>
     </Style>
     
     <!--Accent Button-->
@@ -337,5 +368,29 @@
         </Style>
     </Style>
     
+    <Style Selector=":is(ContentPage)">
+        <Setter Property="Background" Value="{x:Null}"/>
+    </Style>
+    
+    <Style Selector=":is(TabControl)">
+        <Setter Property="PageTransition">
+            <ci:CompositionPageTransition Duration="0:0:0.25"
+                                           SlideInEasing="0,0 0,1"
+                                           SlideOutEasing="0,0 0,1"
+                                           FadeInEasing="0,0 0,1"
+                                           FadeOutEasing="0,0 0,1"/>
+        </Setter>
+    </Style>
+    
+    <Style Selector=":is(TabControl).no-header TabItem">
+        <Setter Property="Header" Value=""/>
+    </Style>
+    
+    <Style Selector=":is(TabControl).no-header /template/ ItemsPresenter#PART_ItemsPresenter">
+        <Setter Property="Height" Value="0"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </Style>
+
     <StyleInclude Source="./Themes/TextBaselineFixes.axaml"/>
 </Styles>

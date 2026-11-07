@@ -7,6 +7,7 @@ using System.Windows;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Abstraction.Models;
@@ -20,6 +21,18 @@ namespace ClassIsland.Core.Controls.LessonsControls;
 /// </summary>
 public class LessonsListBox : ListBox
 {
+    /// <summary>
+    /// Gets or sets the direction in which lessons are arranged.
+    /// </summary>
+    public static readonly StyledProperty<Orientation> OrientationProperty =
+        AvaloniaProperty.Register<LessonsListBox, Orientation>(nameof(Orientation), Orientation.Horizontal);
+
+    public Orientation Orientation
+    {
+        get => GetValue(OrientationProperty);
+        set => SetValue(OrientationProperty, value);
+    }
+
     public static string MinimizedLessonControlResourceKey { get; } = "MinimizedLessonControl";
     public static string ExpandedLessonControlResourceKey { get; } = "ExpandedLessonControl";
     public static string SeparatorLessonControlResourceKey { get; } = "SeparatorLessonControl";
@@ -40,11 +53,11 @@ public class LessonsListBox : ListBox
         set => SetValue(ClassPlanProperty, value);
     }
 
-    public static readonly AttachedProperty<ObservableDictionary<Guid, Subject>> SubjectsProperty =
-        AvaloniaProperty.RegisterAttached<LessonsListBox, Control, ObservableDictionary<Guid, Subject>>("Subjects", inherits:true);
+    public static readonly AttachedProperty<ObservableOrderedDictionary<Guid, Subject>> SubjectsProperty =
+        AvaloniaProperty.RegisterAttached<LessonsListBox, Control, ObservableOrderedDictionary<Guid, Subject>>("Subjects", inherits:true);
 
-    public static void SetSubjects(Control obj, ObservableDictionary<Guid, Subject> value) => obj.SetValue(SubjectsProperty, value);
-    public static ObservableDictionary<Guid, Subject> GetSubjects(Control obj) => obj.GetValue(SubjectsProperty);
+    public static void SetSubjects(Control obj, ObservableOrderedDictionary<Guid, Subject> value) => obj.SetValue(SubjectsProperty, value);
+    public static ObservableOrderedDictionary<Guid, Subject> GetSubjects(Control obj) => obj.GetValue(SubjectsProperty);
 
     public static readonly AttachedProperty<bool> IsLiveUpdatingEnabledProperty =
         AvaloniaProperty.RegisterAttached<LessonsListBox, Control, bool>("IsLiveUpdatingEnabled", false, true);
@@ -61,6 +74,39 @@ public class LessonsListBox : ListBox
     {
         get => GetValue(HighlightChangedClassProperty);
         set => SetValue(HighlightChangedClassProperty, value);
+    }
+
+    /// <summary>
+    /// 是否在横版折叠状态下用科目图标替代简称。
+    /// </summary>
+    public static readonly StyledProperty<bool> ShowSubjectIconWhenMinimizedProperty =
+        AvaloniaProperty.Register<LessonsListBox, bool>(nameof(ShowSubjectIconWhenMinimized), false);
+
+    public bool ShowSubjectIconWhenMinimized
+    {
+        get => GetValue(ShowSubjectIconWhenMinimizedProperty);
+        set => SetValue(ShowSubjectIconWhenMinimizedProperty, value);
+    }
+
+    /// <summary>
+    /// 是否在横版展开状态下显示科目图标。
+    /// </summary>
+    public static readonly StyledProperty<bool> ShowSubjectIconWhenExpandedProperty =
+        AvaloniaProperty.Register<LessonsListBox, bool>(nameof(ShowSubjectIconWhenExpanded), false);
+
+    public static readonly StyledProperty<double> SubjectIconScaleProperty = AvaloniaProperty.Register<LessonsListBox, double>(
+        nameof(SubjectIconScale), 1.0);
+
+    public double SubjectIconScale
+    {
+        get => GetValue(SubjectIconScaleProperty);
+        set => SetValue(SubjectIconScaleProperty, value);
+    }
+
+    public bool ShowSubjectIconWhenExpanded
+    {
+        get => GetValue(ShowSubjectIconWhenExpandedProperty);
+        set => SetValue(ShowSubjectIconWhenExpandedProperty, value);
     }
 
     public static readonly StyledProperty<ILessonControlSettings> LessonControlSettingsProperty =

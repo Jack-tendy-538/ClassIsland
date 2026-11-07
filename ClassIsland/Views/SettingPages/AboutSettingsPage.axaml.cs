@@ -10,6 +10,8 @@ using AsyncImageLoader;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using ClassIsland.Core.Extensions.UI;
+using ClassIsland.Core.Extensions;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -50,18 +52,17 @@ public partial class AboutSettingsPage : SettingsPageBase
     {
         DataContext = this;
         InitializeComponent();
-        var r = new StreamReader(AssetLoader.Open(new Uri("avares://ClassIsland/Assets/LICENSE.txt")));
-        ViewModel.License = r.ReadToEnd();
+        ViewModel.License = AssetLoader.ReadAllText(new Uri("avares://ClassIsland/Assets/LICENSE.txt"));
 
-        using var dependenciesStream = AssetLoader.Open(new Uri("avares://ClassIsland/Assets/dependencies.g.json"));
-        ViewModel.ThirdPartyLibs = JsonSerializer.Deserialize<ObservableCollection<NuGetLicenseInfo>>(dependenciesStream) ?? [];
+        var dependenciesJson = AssetLoader.ReadAllText(new Uri("avares://ClassIsland/Assets/dependencies.g.json"));
+        ViewModel.ThirdPartyLibs = JsonSerializer.Deserialize<ObservableCollection<NuGetLicenseInfo>>(dependenciesJson) ?? [];
     }
 
     private void UriNavigationCommands_OnClick(object sender, RoutedEventArgs e)
     {
         var url = e.Source switch
         {
-            SettingsExpanderItem s => s.CommandParameter?.ToString(),
+            FASettingsExpanderItem s => s.CommandParameter?.ToString(),
             Button s => s.CommandParameter?.ToString(),
             _ => "classisland://app/test/"
         };
@@ -70,17 +71,13 @@ public partial class AboutSettingsPage : SettingsPageBase
 
     private void Hyperlink2_OnClick(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = "https://github.com/DuguSand/class_form",
-            UseShellExecute = true
-        });
+        IAppHost.TryGetService<IUriNavigationService>()?.NavigateWrapped(new Uri("https://github.com/DuguSand/class_form"));
     }
 
     private async void ButtonDiagnosticInfo_OnClick(object sender, RoutedEventArgs e)
     {
         var diagInfo = ViewModel.DiagnosticService.GetDiagnosticInfo();
-        var dialog = new ContentDialog()
+        var dialog = new FAContentDialog()
         {
             Title = "诊断信息",
             Content = new TextBox()
@@ -90,13 +87,13 @@ public partial class AboutSettingsPage : SettingsPageBase
             IsSecondaryButtonEnabled = true,
             PrimaryButtonText = "确定",
             SecondaryButtonText = "复制",
-            DefaultButton = ContentDialogButton.Primary
+            DefaultButton = FAContentDialogButton.Primary
         };
         dialog.SecondaryButtonClick += ButtonCopyDiagnosticInfo_OnClick;
-        await dialog.ShowAsync();
+        await dialog.ShowAsyncAuto();
     }
 
-    private async void ButtonCopyDiagnosticInfo_OnClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    private async void ButtonCopyDiagnosticInfo_OnClick(FAContentDialog sender, FAContentDialogButtonClickEventArgs args)
     {
         bool success = false;
         try
@@ -140,7 +137,7 @@ public partial class AboutSettingsPage : SettingsPageBase
             App.GetService<ILogger<AboutSettingsPage>>().LogError(ex, "无法获取贡献者名单。");
             this.ShowToast(new ToastMessage()
             {
-                Severity = InfoBarSeverity.Error,
+                Severity = FAInfoBarSeverity.Error,
                 Title = "无法获取贡献者名单",
                 Message = ex.Message,
                 AutoClose = false
@@ -172,9 +169,7 @@ public partial class AboutSettingsPage : SettingsPageBase
 
         if (ViewModel.SayingsCollection.Count <= 0)
         {
-            var stream = AssetLoader.Open(new Uri("avares://ClassIsland/Assets/Tellings.txt"));
-
-            var sayings = await new StreamReader(stream).ReadToEndAsync();
+            var sayings = await AssetLoader.ReadAllTextAsync(new Uri("avares://ClassIsland/Assets/Tellings.txt"));
             string[] sayingsArray= sayings.Split(Environment.NewLine);
             var collection = new ObservableCollection<string>(sayingsArray);
             var countRaw = collection.Count;
@@ -196,9 +191,8 @@ public partial class AboutSettingsPage : SettingsPageBase
 
     private async void SettingsExpanderItemShowOssLicense_OnClick(object? sender, RoutedEventArgs e)
     {
-        var license = await new StreamReader(AssetLoader.Open(new Uri("avares://ClassIsland/Assets/LICENSE.txt")))
-            .ReadToEndAsync();
-        await new ContentDialog()
+        var license = await AssetLoader.ReadAllTextAsync(new Uri("avares://ClassIsland/Assets/LICENSE.txt"));
+        await new FAContentDialog()
         {
             Title = "开放源代码许可",
             Content = new TextBlock()
@@ -206,8 +200,8 @@ public partial class AboutSettingsPage : SettingsPageBase
                 Text = license
             },
             PrimaryButtonText = "关闭",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync();
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto();
     }
 
     private async void DebugBorder_OnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -236,7 +230,7 @@ public partial class AboutSettingsPage : SettingsPageBase
             textBlock.PointerPressed += (_,_) => {
                 timesBlockClicked++;
             };
-            var r = await new ContentDialog()
+            var r = await new FAContentDialog()
             {
                 Title = "启用调试菜单",
                 Content = new StackPanel
@@ -255,11 +249,11 @@ public partial class AboutSettingsPage : SettingsPageBase
                 },
                 PrimaryButtonText = "继续",
                 SecondaryButtonText = "取消",
-                DefaultButton = ContentDialogButton.Primary
-            }.ShowAsync();
+                DefaultButton = FAContentDialogButton.Primary
+            }.ShowAsyncAuto();
             
             
-            if (r != ContentDialogResult.Primary)
+            if (r != FAContentDialogResult.Primary)
             {
                 return;
             }
@@ -286,16 +280,16 @@ public partial class AboutSettingsPage : SettingsPageBase
         {
             Source = "https://res.classisland.tech/banners/reunion.webp",
         };
-        var contentDialog = new ContentDialog()
+        var contentDialog = new FAContentDialog()
         {
             Content = advancedImage,
             Title = "查看图片",
             PrimaryButtonText = "关闭",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             SecondaryButtonText = "在浏览器查看"
         };
-        var r = await contentDialog.ShowAsync();
-        if (r == ContentDialogResult.Secondary)
+        var r = await contentDialog.ShowAsyncAuto();
+        if (r == FAContentDialogResult.Secondary)
         {
             IAppHost.GetService<IUriNavigationService>().NavigateWrapped(new Uri("https://res.classisland.tech/banners/reunion.webp"));
         }

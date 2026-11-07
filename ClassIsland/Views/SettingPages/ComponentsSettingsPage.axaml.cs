@@ -10,6 +10,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using ClassIsland.Core.Extensions.UI;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -23,6 +24,7 @@ using ClassIsland.Core.Controls.Ruleset;
 using ClassIsland.Core.Enums.SettingsWindow;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Models.Components;
+using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Services;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Helpers;
@@ -38,14 +40,26 @@ namespace ClassIsland.Views.SettingPages;
 public partial class ComponentsSettingsPage : SettingsPageBase
 {
     public ComponentsSettingsViewModel ViewModel { get; } = IAppHost.GetService<ComponentsSettingsViewModel>();
+
+    private IDisposable? _currentComponentConfigSubscription;
     
     public ComponentsSettingsPage()
     {
         InitializeComponent();
         DataContext = this;
-        ViewModel.SettingsService.Settings
+    }
+
+    private void ComponentsSettingsPage_OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        _currentComponentConfigSubscription ??= ViewModel.SettingsService.Settings
             .ObservableForProperty(x => x.CurrentComponentConfig)
             .Subscribe(_ => ClearSelectedComponents());
+    }
+
+    private void ComponentsSettingsPage_OnUnloaded(object? sender, RoutedEventArgs e)
+    {
+        _currentComponentConfigSubscription?.Dispose();
+        _currentComponentConfigSubscription = null;
     }
     
     private void ButtonRefresh_OnClick(object sender, RoutedEventArgs e)
@@ -70,10 +84,10 @@ public partial class ComponentsSettingsPage : SettingsPageBase
         {
             Text = ""
         };
-        var dialogResult = await new ContentDialog()
+        var dialogResult = await new FAContentDialog()
         {
             Title = "创建组件配置",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonText = "创建",
             SecondaryButtonText = "取消",
             Content = new Field()
@@ -82,12 +96,12 @@ public partial class ComponentsSettingsPage : SettingsPageBase
                 Label = "组件名",
                 Suffix = ".json"
             }
-        }.ShowAsync();
+        }.ShowAsyncAuto();
 
         ViewModel.CreateProfileName = textBox.Text;
         var path = Path.Combine(ClassIsland.Services.ComponentsService.ComponentSettingsPath,
             ViewModel.CreateProfileName + ".json");
-        if (dialogResult != ContentDialogResult.Primary || File.Exists(path))
+        if (dialogResult != FAContentDialogResult.Primary || File.Exists(path))
         {
             return;
         }
@@ -144,11 +158,7 @@ public partial class ComponentsSettingsPage : SettingsPageBase
 
     private void ButtonOpenConfigFolder_OnClick(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = Path.GetFullPath(ClassIsland.Services.ComponentsService.ComponentSettingsPath),
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(ClassIsland.Services.ComponentsService.ComponentSettingsPath);
     }
     
     private void ButtonRemoveSelectedComponent_OnClick(object sender, RoutedEventArgs e)

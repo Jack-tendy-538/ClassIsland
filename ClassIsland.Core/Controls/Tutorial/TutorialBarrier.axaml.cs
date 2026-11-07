@@ -153,7 +153,7 @@ public class TutorialBarrier : ContentControl
             Message = "教学正在进行中，等当前段落教学结束后再使用此功能吧。",
             ActionContent = hyperlinkButton,
             Duration = TimeSpan.FromSeconds(5),
-            Severity = InfoBarSeverity.Warning
+            Severity = FAInfoBarSeverity.Warning
         };
         hyperlinkButton.Click += (sender, args) =>
         {
@@ -163,7 +163,7 @@ public class TutorialBarrier : ContentControl
         this.ShowToast(toastMessage);
     }
 
-    private void OnGotFocus(object? sender, GotFocusEventArgs e)
+    private void OnGotFocus(object? sender, RoutedEventArgs e)
     {
         if (!IsBarrierEnabled || e.Source == this)
         {

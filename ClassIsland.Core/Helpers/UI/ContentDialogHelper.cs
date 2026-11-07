@@ -1,13 +1,14 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using ClassIsland.Core.Extensions.UI;
 using FluentAvalonia.UI.Controls;
 using ShimSkiaSharp;
 
 namespace ClassIsland.Core.Helpers.UI;
 
 /// <summary>
-/// <see cref="ContentDialog"/> 辅助类
+/// <see cref="FAContentDialog"/> 辅助类
 /// </summary>
 public static class ContentDialogHelper
 {
@@ -42,16 +43,16 @@ public static class ContentDialogHelper
             stackPanel.Children.Add(textBox);
         }
 
-        var dialog = new ContentDialog()
+        var dialog = new FAContentDialog()
         {
             Title = title,
             Content = stackPanel,
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonText = positiveText,
             CloseButtonText = negativeText
         };
-        var r = await dialog.ShowAsync(root);
-        if (r != ContentDialogResult.Primary)
+        var r = await dialog.ShowAsyncAuto(root);
+        if (r != FAContentDialogResult.Primary)
         {
             return false;
         }

@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform;
 using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Controls;
+using ClassIsland.Core.Extensions;
 using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Enums.SettingsWindow;
 using ClassIsland.Enums.AppUpdating;
@@ -141,12 +142,12 @@ public partial class UpdateSettingsPage : SettingsPageBase
         await ViewModel.UpdateService.ExtractUpdateAsync();
     }
 
-    private void InfoBarError_OnCloseButtonClick(InfoBar sender, EventArgs args)
+    private void InfoBarError_OnCloseButtonClick(FAInfoBar sender, EventArgs args)
     {
         ViewModel.UpdateService.NetworkErrorException = null;
     }
     
-    private void InfoBarDeployError_OnCloseButtonClick(InfoBar sender, EventArgs args)
+    private void InfoBarDeployError_OnCloseButtonClick(FAInfoBar sender, EventArgs args)
     {
         ViewModel.UpdateService.DeployErrorException = null;
     }
@@ -161,11 +162,10 @@ public partial class UpdateSettingsPage : SettingsPageBase
         await ViewModel.UpdateService.CheckUpdateAsync(true);
     }
 
-    private void ButtonShowChangeLogs_OnClick(object? sender, RoutedEventArgs e)
+    private async void ButtonShowChangeLogs_OnClick(object? sender, RoutedEventArgs e)
     {
-        using var sr =
-            new StreamReader(AssetLoader.Open(new Uri("avares://ClassIsland/Assets/Documents/ChangeLog.md")));
-        ViewModel.ChangeLogDocument = sr.ReadToEnd();
+        ViewModel.ChangeLogDocument = await AssetLoader.ReadAllTextAsync(
+            new Uri("avares://ClassIsland/Assets/Documents/ChangeLog.md"));
         OpenDrawer("ChangeLogDrawer");
     }
 

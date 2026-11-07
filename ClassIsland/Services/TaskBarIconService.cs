@@ -17,7 +17,16 @@ public class TaskBarIconService : IHostedService, ITaskBarIconService
     public TaskBarIconService(ILogger<TaskBarIconService> logger)
     {
         Logger = logger;
-        
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+        {
+            MainTaskBarIcon.Icon = new WindowIcon(OperatingSystem.IsMacOS()
+                ? "../Resources/Assets/AppLogo_Monochrome.png"
+                : "Assets/AppLogo.png");
+
+            var icons = TrayIcon.GetIcons(AppBase.Current) ?? new TrayIcons();
+            icons.Add(MainTaskBarIcon);
+            TrayIcon.SetIcons(AppBase.Current, icons);
+        }
         AppBase.Current.AppStopping += CurrentOnAppStopping;
     }
 
@@ -33,7 +42,6 @@ public class TaskBarIconService : IHostedService, ITaskBarIconService
         get;
     } = new()
     {
-        Icon = new WindowIcon(OperatingSystem.IsMacOS() ? "../Resources/Assets/AppLogo_Monochrome.png" : "Assets/AppLogo.png"),
         ToolTipText = "ClassIsland"
     };
 

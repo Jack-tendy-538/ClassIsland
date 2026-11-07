@@ -10,6 +10,7 @@ using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Services;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Extensions;
+using ClassIsland.Shared.Models.Profile;
 using ClassIsland.Views;
 using CsesSharp;
 using FluentAvalonia.UI.Controls;
@@ -25,9 +26,17 @@ public class CsesExportHelper
         var warnings = new List<string>();
         foreach (var i in profileService.Profile.ClassPlans)
         {
+            if (i.Value.TimeRule.Type != TimeRule.TimeRuleType.Weekly)
+            {
+                warnings.Add($"课程表 {i.Value.Name}：无法导出非每周启用的课表。");
+            }
             if (i.Value.TimeRule.WeekCountDivTotal > 2 || i.Value.TimeRule.WeekCountDiv > 2)
             {
                 warnings.Add($"课程表 {i.Value.Name}：无法导出包含 2 周以上轮换的课表。");
+            }
+            if (i.Value.TimeRule.RestrictsEnableRange)
+            {
+                warnings.Add($"课程表 {i.Value.Name}：无法导出限制启用日期范围的课表。");
             }
             if (i.Value.TimeLayout == null)
             {
@@ -68,12 +77,23 @@ public class CsesExportHelper
         try
         {
             var csesProfile = profileService.Profile.ToCsesObject();
-            CsesLoader.SaveToYamlFile(csesProfile, filePath);
-            Process.Start(new ProcessStartInfo()
+            using var file = await PlatformServices.FilePickerService.GetFileAsync(filePath, root)
+                             ?? throw new FileNotFoundException("无法打开所选 CSES 文件。", filePath);
+            await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
             {
-                FileName = Path.GetDirectoryName(Path.GetFullPath(filePath)),
-                UseShellExecute = true
-            });
+                stream.SetLength(0);
+                stream.Position = 0;
+            }
+            await using (var writer = new StreamWriter(stream, leaveOpen: true))
+            {
+                await writer.WriteAsync(CsesLoader.SaveToYamlString(csesProfile));
+                await writer.FlushAsync();
+            }
+            var launchPath = PlatformServices.FilePickerService.IsBookmark(filePath)
+                ? filePath
+                : Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? filePath;
+            await PlatformServices.LauncherService.LaunchPath(launchPath);
             root.ShowSuccessToast($"成功导出到 {filePath}。");
         }
         catch (Exception exception)

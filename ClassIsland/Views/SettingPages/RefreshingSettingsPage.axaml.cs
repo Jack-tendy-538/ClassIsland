@@ -2,10 +2,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.VisualTree;
 using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Enums.SettingsWindow;
+using ClassIsland.Core.Extensions.UI;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Services;
 using ClassIsland.Shared;
@@ -33,16 +35,16 @@ public partial class RefreshingSettingsPage : SettingsPageBase
 
     private async void SettingsExpanderItemResetOnboardingMessages_OnClick(object? sender, RoutedEventArgs e)
     {
-        var dialog = new ContentDialog()
+        var dialog = new FAContentDialog()
         {
             Title = "重置迎新消息设置",
             Content = "确定要重置迎新消息设置吗？此操作不可撤销！",
             PrimaryButtonText = "重置",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             SecondaryButtonText = "取消"
         };
-        var r = await dialog.ShowAsync(TopLevel.GetTopLevel(this));
-        if (r != ContentDialogResult.Primary)
+        var r = await dialog.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (r != FAContentDialogResult.Primary)
         {
             return;
         }
@@ -63,7 +65,7 @@ public partial class RefreshingSettingsPage : SettingsPageBase
         {
             Scopes = ViewModel.SettingsService.Settings.RefreshingScopes
         };
-        await win.ShowDialog((TopLevel.GetTopLevel(this) as Window)!);
+        await win.ShowModal(this.FindAncestorOfType<ViewBase>());
     }
 
     private void ButtonExit_OnClick(object? sender, RoutedEventArgs e)

@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml;
-using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Abstractions.Controls.ProfileTransferProviders;
 using ClassIsland.Core.Abstractions.Services;
+using ClassIsland.Core.Extensions;
 using ClassIsland.Core.Helpers.UI;
+using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Services;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Extensions;
@@ -43,11 +43,15 @@ public partial class CsesImportProvider : GenericImportProviderBase
     {
         try
         {
-            var csesProfile = CsesLoader.LoadFromYamlFile(SourceFilePath);
-            var templateProfileJson =
-                await new StreamReader(AssetLoader.Open(new Uri("avares://ClassIsland/Assets/default-subjects.json"))).ReadToEndAsync();
-            var templateProfile = JsonSerializer.Deserialize<Profile>(templateProfileJson);
-            var profile = csesProfile.ToClassIslandObject(ImportType == 0 ? ProfileService.Profile : templateProfile);
+            var topLevel = TopLevel.GetTopLevel(this) ?? AppBase.Current.GetRootWindow();
+            using var file = await PlatformServices.FilePickerService.GetFileAsync(SourceFilePath, topLevel)
+                             ?? throw new FileNotFoundException("无法打开所选 CSES 文件。", SourceFilePath);
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            var csesProfile = CsesLoader.LoadFromYamlString(await reader.ReadToEndAsync());
+            var profile = csesProfile.ToClassIslandObject(ImportType == 0
+                ? ProfileService.Profile
+                : Services.ProfileService.CreateProfile(true));
             if (ImportType == 1)
             {
                 var path = System.IO.Path.Combine(Services.ProfileService.ProfilePath, NewProfileName + ".json");

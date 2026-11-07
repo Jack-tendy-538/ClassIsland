@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 using Avalonia;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Controls;
 using ClassIsland.Core.Models.UriNavigation;
+using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Shared.IPC.Abstractions.Services;
 using dotnetCampus.Ipc.CompilerServices.GeneratedProxies;
 using Microsoft.Extensions.Logging;
@@ -68,11 +71,7 @@ public class UriNavigationService : IUriNavigationService
             }
             else
             {
-                Process.Start(new ProcessStartInfo()
-                {
-                    FileName = uri.ToString(),
-                    UseShellExecute = true
-                });
+                PlatformServices.LauncherService.LaunchUrl(uri.ToString());
             }
         });
     }

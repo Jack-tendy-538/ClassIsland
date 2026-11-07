@@ -8,15 +8,16 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Avalonia.Platform;
+using Avalonia.VisualTree;
 using ClassIsland.Core;
+using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Abstractions.Services;
+using ClassIsland.Core.Extensions;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Models.Automation;
 using ClassIsland.Services;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Helpers;
-using ClassIsland.Shared.Models.Profile;
 using ClassIsland.ViewModels;
 using Microsoft.Extensions.Logging;
 
@@ -35,12 +36,13 @@ public partial class RefreshingPage : UserControl, IWelcomePage
         InitializeComponent();
     }
 
-    private void ButtonSelectedReservedItems_OnClick(object? sender, RoutedEventArgs e)
+    private async void ButtonSelectedReservedItems_OnClick(object? sender, RoutedEventArgs e)
     {
-        new RefreshingScopesConfigDialog()
+        var view = new RefreshingScopesConfigDialog()
         {
             Scopes = ViewModel.RefreshingScopes
-        }.ShowDialog((Window)TopLevel.GetTopLevel(this)!);
+        };
+        await view.ShowModal(this.FindAncestorOfType<ViewBase>());
     }
 
     private async void ButtonNext_OnClick(object? sender, RoutedEventArgs e)
@@ -79,11 +81,7 @@ public partial class RefreshingPage : UserControl, IWelcomePage
             }
             else
             {
-                var profileNew = new Profile();
-                using var streamReader = new StreamReader(AssetLoader.Open(new Uri("avares://ClassIsland/Assets/default-subjects.json",
-                    UriKind.Absolute)));
-                var subject = await streamReader.ReadToEndAsync();
-                profile.Subjects = JsonSerializer.Deserialize<Profile>(subject)!.Subjects;
+                var profileNew = ProfileService.CreateProfile(true);
                 var json = JsonSerializer.Serialize(profileNew);
                 var newFile = Guid.NewGuid().ToString();
                 await File.WriteAllTextAsync(Path.Combine(ProfileService.ProfilePath, $"{newFile}.json"), json);

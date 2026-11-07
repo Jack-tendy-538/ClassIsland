@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using ClassIsland.Core.Enums.UI;
 
 namespace ClassIsland.Core.Assists;
 
@@ -9,6 +10,22 @@ namespace ClassIsland.Core.Assists;
 /// </summary>
 public class MainWindowStylesAssist
 {
+    /// <summary>
+    /// 指示主窗口正在预留渲染高度。配合临时固定窗口高度使用，使底部停靠的内容保持原有屏幕位置。
+    /// </summary>
+    public static readonly AttachedProperty<bool> IsWindowRenderSizeReservedProperty =
+        AvaloniaProperty.RegisterAttached<MainWindowStylesAssist, Window, bool>("IsWindowRenderSizeReserved");
+
+    /// <summary>
+    /// 设置主窗口是否正在预留渲染高度。
+    /// </summary>
+    public static void SetIsWindowRenderSizeReserved(Window obj, bool value) => obj.SetValue(IsWindowRenderSizeReservedProperty, value);
+
+    /// <summary>
+    /// 获取主窗口是否正在预留渲染高度。
+    /// </summary>
+    public static bool GetIsWindowRenderSizeReserved(Window obj) => obj.GetValue(IsWindowRenderSizeReservedProperty);
+
     public static readonly AttachedProperty<bool> IsIslandSeperatedProperty =
         AvaloniaProperty.RegisterAttached<MainWindowStylesAssist, Control, bool>("IsIslandSeperated", inherits:true);
 
@@ -51,6 +68,19 @@ public class MainWindowStylesAssist
 
     public static void SetIsCustomBackgroundColorEnabled(Control obj, bool value) => obj.SetValue(IsCustomBackgroundColorEnabledProperty, value);
     public static bool GetIsCustomBackgroundColorEnabled(Control obj) => obj.GetValue(IsCustomBackgroundColorEnabledProperty);
+
+    public static readonly AttachedProperty<bool> IsBackgroundMaterialEnabledProperty =
+        AvaloniaProperty.RegisterAttached<MainWindowStylesAssist, Control, bool>("IsBackgroundMaterialEnabled", inherits: true);
+
+    public static void SetIsBackgroundMaterialEnabled(Control obj, bool value) => obj.SetValue(IsBackgroundMaterialEnabledProperty, value);
+    public static bool GetIsBackgroundMaterialEnabled(Control obj) => obj.GetValue(IsBackgroundMaterialEnabledProperty);
+
+    public static readonly AttachedProperty<MainWindowBackgroundMaterialType> BackgroundMaterialTypeProperty =
+        AvaloniaProperty.RegisterAttached<MainWindowStylesAssist, Control, MainWindowBackgroundMaterialType>(
+            "BackgroundMaterialType", MainWindowBackgroundMaterialType.Acrylic, inherits: true);
+
+    public static void SetBackgroundMaterialType(Control obj, MainWindowBackgroundMaterialType value) => obj.SetValue(BackgroundMaterialTypeProperty, value);
+    public static MainWindowBackgroundMaterialType GetBackgroundMaterialType(Control obj) => obj.GetValue(BackgroundMaterialTypeProperty);
 
     public static readonly AttachedProperty<bool> MainWindowInEditModeProperty =
         AvaloniaProperty.RegisterAttached<MainWindowStylesAssist, Control, bool>("MainWindowInEditMode", inherits: true);

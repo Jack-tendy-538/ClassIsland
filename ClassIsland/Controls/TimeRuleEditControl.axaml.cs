@@ -3,11 +3,15 @@ using System.ComponentModel;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data.Converters;
 using Avalonia.Threading;
 using ClassIsland.Core.Extensions;
+using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Services;
 using ClassIsland.Shared.Models.Profile;
 using ClassIsland.ViewModels;
+using CommunityToolkit.Mvvm.Input;
+using DynamicData;
 using DynamicData.Binding;
 
 namespace ClassIsland.Controls;
@@ -17,10 +21,20 @@ namespace ClassIsland.Controls;
 /// </summary>
 public partial class TimeRuleEditControl : UserControl
 {
+    private readonly IDisposable _timeRulePropertyObserver;
+    private bool _resourcesReleased;
+
+    public static FuncValueConverter<DateOnly, DateTime> DateOnlyToDateTimeConverter { get; }
+        = new(x => new DateTime(x, new TimeOnly(0, 0, 0)),
+            DateOnly.FromDateTime);
+
+    public static FuncValueConverter<int, int> CycleDaysToMaxOffsetDaysConverter { get; }
+        = new(x => x - 1);
+    
     /// <inheritdoc />
     public TimeRuleEditControl()
     {
-        this.GetObservable(TimeRuleProperty)
+        _timeRulePropertyObserver = this.GetObservable(TimeRuleProperty)
             .Skip(1)
             .Subscribe(_ => TimeRulePropertyOnNext());
         InitializeComponent();
@@ -29,10 +43,12 @@ public partial class TimeRuleEditControl : UserControl
     private void TimeRulePropertyOnNext()
     {
         var newValue = TimeRule;
-        ViewModel.PropertyChanged -= ViewModelOnPropertyChanged;
-        SettingsService.Settings.PropertyChanged -= SettingsOnPropertyChanged;
-        _timeRuleObserver?.Dispose();
-        _timeRuleObserver = null;
+        ReleaseExternalSubscriptions();
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         if (newValue != null)
         {
             UpdateViewModel(newValue);
@@ -42,6 +58,27 @@ public partial class TimeRuleEditControl : UserControl
             _timeRuleObserver = newValue.WhenAnyPropertyChanged()
                 .Subscribe(_ => UpdateViewModel(newValue));
         }
+    }
+
+    private void ReleaseExternalSubscriptions()
+    {
+        ViewModel.PropertyChanged -= ViewModelOnPropertyChanged;
+        SettingsService.Settings.PropertyChanged -= SettingsOnPropertyChanged;
+        _timeRuleObserver?.Dispose();
+        _timeRuleObserver = null;
+    }
+
+    public void ReleaseResources()
+    {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
+        _resourcesReleased = true;
+        _timeRulePropertyObserver.Dispose();
+        ReleaseExternalSubscriptions();
+        TimeRule = null;
     }
 
     private void UpdateViewModel(TimeRule timeRule)
@@ -69,6 +106,11 @@ public partial class TimeRuleEditControl : UserControl
                 ViewModel.WeekCountDivIndex = -1;
                 Dispatcher.UIThread.Post(() =>
                     {
+                        if (_resourcesReleased)
+                        {
+                            return;
+                        }
+
                         if (TimeRule.WeekCountDivTotal < TimeRule.WeekCountDiv)
                         {
                             ViewModel.WeekCountDivIndex = 0;
@@ -125,6 +167,11 @@ public partial class TimeRuleEditControl : UserControl
         
         Dispatcher.UIThread.Post(() =>
         {
+            if (_resourcesReleased)
+            {
+                return;
+            }
+
             WeekCountDivTotalListBox.ItemsSource = ViewModel.WeekCountDivTotalOptions;
             ViewModel.WeekCountDivTotalIndex = Math.Min(w, ViewModel.WeekCountDivTotalOptions.Count - 1);
             
@@ -138,6 +185,45 @@ public partial class TimeRuleEditControl : UserControl
         {
             UpdateWeekCountDivTotalOptions();
         }
+    }
+
+    [RelayCommand]
+    private void PreEditSelectedDate(DateOnly date)
+    {
+        ViewModel.NewDateTime = new DateTime(date, new TimeOnly(0, 0, 0));
+    }
+
+    [RelayCommand]
+    private void CommitEditSelectedDate(Control source)
+    {
+        if (TimeRule == null)
+        {
+            return;
+        }
+
+        var date = source.Tag is DateOnly value ? value : (DateOnly?)null;
+        var newDateOnly = DateOnly.FromDateTime(ViewModel.NewDateTime);
+        if (TimeRule.EnableDates.Contains(newDateOnly))
+        {
+            this.ShowWarningToast("日期已存在。");
+            return;
+        }
+        if (date is {} d)
+        {
+            TimeRule.EnableDates.Replace(d, newDateOnly);
+        }
+        else
+        {
+            TimeRule.EnableDates.Add(newDateOnly);
+        }
+
+        FlyoutHelper.CloseAncestorFlyout(source);
+    }
+
+    [RelayCommand]
+    private void RemoveDate(DateOnly date)
+    {
+        TimeRule?.EnableDates.Remove(date);
     }
 
     public TimeRuleEditViewModel ViewModel { get; } = new();
@@ -155,5 +241,4 @@ public partial class TimeRuleEditControl : UserControl
     }
     public static readonly StyledProperty<TimeRule?> TimeRuleProperty = 
         AvaloniaProperty.Register<TimeRuleEditControl, TimeRule?>(nameof(TimeRule));
-    
 }

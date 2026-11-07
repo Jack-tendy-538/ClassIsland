@@ -37,11 +37,12 @@
         <DefineConstants>$(DefineConstants);Platforms_Windows</DefineConstants>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Assets\AppLogo.ico</ApplicationIcon>
+        <CetCompat>False</CetCompat>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Platforms_MacOs)'=='true'">
-        <TargetFramework>$(BaseFramework)-macos15.0</TargetFramework>
+        <TargetFramework>$(BaseFramework)-macos26.5</TargetFramework>
         <DefineConstants>$(DefineConstants);Platforms_MacOs</DefineConstants>
-        <SupportedOSPlatformVersion>10.15</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion>12.0</SupportedOSPlatformVersion>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Platforms_Windows)'=='true' And ('$(Configuration)'=='Release' Or '$(Configuration)'=='Release_MSIX')">
         <OutputType>WinExe</OutputType>

@@ -1,4 +1,4 @@
-﻿<ci:MyWindow x:Class="ClassIsland.Views.AuthorizeWindow"
+﻿<ci:ViewBase x:Class="ClassIsland.Views.AuthorizeWindow"
         xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -10,18 +10,18 @@
         xmlns:controls="clr-namespace:ClassIsland.Controls"
         xmlns:dd="urn:gong-wpf-dragdrop"
         xmlns:input="clr-namespace:Avalonia.Labs.Input;assembly=Avalonia.Labs.CommandManager"
+        xmlns:fa="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
         mc:Ignorable="d"
-        Width="500"
-        WindowStartupLocation="CenterScreen"
+        HostWidth="500"
+        HostStartupLocation="CenterScreen"
         d:DataContext="{d:DesignInstance local:AuthorizeWindow}"
         SizeToContent="Height"
         CanResize="False"
         MinHeight="300"
         MaxHeight="700"
-        Topmost="True"
         ShowAsDialog="True"
         CanMaximize="False"
-        Title="ClassIsland">
+        Header="ClassIsland">
     <input:CommandManager.CommandBindings>
         <input:CommandBinding Command="{x:Static ci:AuthorizeProviderControlBase.CompleteAuthorizeCommand}" Executed="CommandBindingCompleteAuthorize_OnExecuted"></input:CommandBinding>
     </input:CommandManager.CommandBindings>
@@ -51,7 +51,7 @@
                       SelectedItem="{Binding ViewModel.SelectedAuthorizeProviderInfo}">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
-                        <ci:IconText Glyph="{Binding IconGlyph}" Text="{Binding Name}"/>
+                        <ci:IconText IconSource="{Binding IconSource}" Text="{Binding Name}"/>
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
@@ -79,15 +79,16 @@
                 <DataTemplate>
                     <Grid Margin="0 8 4 8" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
                         
-                        <ci:FluentIcon Grid.Column="0" Grid.Row="0"
-                                       Foreground="{DynamicResource AccentFillColorDefaultBrush}"
-                                       Glyph="{Binding ProviderInfo.IconGlyph}"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Center"
-                                       Margin="0 0 8 0"
-                                       Height="20"
-                                       FontSize="20"
-                                       Width="20"/>
+                        <fa:FAIconSourceElement Grid.Column="0" Grid.Row="0"
+                                                Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                                IconSource="{Binding ProviderInfo.IconSource}"
+                                                VerticalAlignment="Center"
+                                                HorizontalAlignment="Center"
+                                                Margin="0 0 8 0"
+                                                Height="20"
+                                                TextElement.FontSize="20"
+                                                Classes="repair-fontsize"
+                                                Width="20"/>
                         
                         <TextBlock Grid.Column="1" Grid.Row="0"
                                    VerticalAlignment="Center"
@@ -150,4 +151,4 @@
             </Button>
         </Grid>
     </Grid>
-</ci:MyWindow>
+</ci:ViewBase>

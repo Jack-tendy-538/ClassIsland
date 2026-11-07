@@ -74,15 +74,15 @@ public class RefreshingService(SettingsService settingsService, IExactTimeServic
 
     public async Task<bool> ShowOnboardingDialog(bool isTest=false)
     {
-        var r = await new TaskDialog()
+        var r = await new FATaskDialog()
         {
             Header = SettingsService.Settings.OnboardingToastTitle,
             Content = SettingsService.Settings.OnboardingToastBody,
             Buttons =
             [
-                new TaskDialogButton("退出并不再显示", 0),
-                new TaskDialogButton("以后再说", 1),
-                new TaskDialogButton("好",2)
+                new FATaskDialogButton("退出并不再显示", 0),
+                new FATaskDialogButton("以后再说", 1),
+                new FATaskDialogButton("好",2)
                 {
                     IsDefault = true
                 },
@@ -112,7 +112,7 @@ public class RefreshingService(SettingsService settingsService, IExactTimeServic
         welcomeWin.ViewModel.RefreshingScopes =
             ConfigureFileHelper.CopyObject(SettingsService.Settings.RefreshingScopes);
         welcomeWin.SetWelcomeExperience(true, isOnboarding, false);
-        await welcomeWin.ShowDialog(AppBase.Current.GetRootWindow());
+        await welcomeWin.ShowModal();
         if (!isOnboarding)
         {
             return false;

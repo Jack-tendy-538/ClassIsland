@@ -37,12 +37,19 @@ public partial class ThemesSettingsPage : SettingsPageBase
 {
     public ThemesSettingsViewModel ViewModel { get; } = IAppHost.GetService<ThemesSettingsViewModel>();
 
+    private IDisposable? _pluginMarketExceptionSubscription;
+
     public ThemesSettingsPage()
     {
 
         InitializeComponent();
         DataContext = this;
-        ViewModel.PluginMarketService.ObservableForProperty(x => x.Exception)
+
+    }
+
+    private void ThemesSettingsPage_OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        _pluginMarketExceptionSubscription ??= ViewModel.PluginMarketService.ObservableForProperty(x => x.Exception)
             .Subscribe(_ =>
             {
                 if (ViewModel.PluginMarketService.Exception == null)
@@ -52,7 +59,12 @@ public partial class ThemesSettingsPage : SettingsPageBase
 
                 this.ShowErrorToast("无法刷新市场", ViewModel.PluginMarketService.Exception);
             });
+    }
 
+    private void ThemesSettingsPage_OnUnloaded(object? sender, RoutedEventArgs e)
+    {
+        _pluginMarketExceptionSubscription?.Dispose();
+        _pluginMarketExceptionSubscription = null;
     }
 
     private void ButtonLoadThemes_OnClick(object sender, RoutedEventArgs e)
@@ -65,11 +77,7 @@ public partial class ThemesSettingsPage : SettingsPageBase
     [RelayCommand]
     private void OpenFolder(ThemeInfo info)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = System.IO.Path.GetFullPath(info.Path),
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(info.Path);
     }
 
     [RelayCommand]
@@ -80,11 +88,7 @@ public partial class ThemesSettingsPage : SettingsPageBase
 
     private void ButtonOpenThemeFolder_OnClick(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = ClassIsland.Services.XamlThemeService.ThemesPath,
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(ClassIsland.Services.XamlThemeService.ThemesPath);
     }
 
     private void ListBoxCategory_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -151,12 +155,19 @@ public partial class ThemesSettingsPage : SettingsPageBase
             return;
         try
         {
-            await ViewModel.XamlThemeService.PackageThemeAsync(info.Manifest.Id, file);
-            Process.Start(new ProcessStartInfo()
+            using var storageFile = await PlatformServices.FilePickerService.GetFileAsync(file, topLevel)
+                                    ?? throw new FileNotFoundException("无法打开所选主题包文件。", file);
+            await using var outputStream = await storageFile.OpenWriteAsync();
+            if (outputStream.CanSeek)
             {
-                FileName = Path.GetDirectoryName(file) ?? "",
-                UseShellExecute = true
-            });
+                outputStream.SetLength(0);
+                outputStream.Position = 0;
+            }
+            await ViewModel.XamlThemeService.PackageThemeAsync(info.Manifest.Id, outputStream);
+            var launchPath = PlatformServices.FilePickerService.IsBookmark(file)
+                ? file
+                : Path.GetDirectoryName(file) ?? file;
+            await PlatformServices.LauncherService.LaunchPath(launchPath);
         }
         catch (Exception ex)
         {

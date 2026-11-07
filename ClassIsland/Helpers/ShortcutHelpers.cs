@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Platform;
 using ClassIsland.Core;
+using ClassIsland.Core.Extensions;
 using Mono.Unix;
 using WindowsShortcutFactory;
 
@@ -57,9 +58,14 @@ public static class ShortcutHelpers
     public static async Task CreateClassSwapShortcutAsync(string path="")
     {
         var desktopPath = string.IsNullOrEmpty(path) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "快捷换课.url") : path;
-        var stream = AssetLoader.Open(new Uri("avares://ClassIsland/Assets/ShortcutTemplates/ClassSwap.url"));
+        await using var outputStream = File.Create(desktopPath);
+        await CreateClassSwapShortcutAsync(outputStream);
+    }
 
-        await File.WriteAllTextAsync(desktopPath, await new StreamReader(stream).ReadToEndAsync());
+    public static async Task CreateClassSwapShortcutAsync(Stream outputStream)
+    {
+        await using var stream = AssetLoader.Open(new Uri("avares://ClassIsland/Assets/ShortcutTemplates/ClassSwap.url"));
+        await stream.CopyToAsync(outputStream);
     }
 
     public static async Task CreateFreedesktopShortcutAsync(string path = "", bool isAutostart = false)
@@ -74,9 +80,8 @@ public static class ShortcutHelpers
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".local/share/applications/cn.classisland.app.desktop") : path;
 
-        var raw = await new StreamReader(
-                AssetLoader.Open(new Uri("avares://ClassIsland/Assets/ShortcutTemplates/cn.classisland.app.desktop")))
-            .ReadToEndAsync();
+        var raw = await AssetLoader.ReadAllTextAsync(
+            new Uri("avares://ClassIsland/Assets/ShortcutTemplates/cn.classisland.app.desktop"));
         var args = isAutostart ? "--autostartup" : "--uri %u";
         var final = string.Format(raw, AppBase.AppVersion, AppBase.ExecutingEntrance, args);
         await File.WriteAllTextAsync(targetPath, final);

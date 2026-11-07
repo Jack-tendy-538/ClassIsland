@@ -7,10 +7,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Interactivity;
+using ClassIsland.Core.Abstractions.Controls;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Abstractions.Services.Management;
 using ClassIsland.Core.Controls;
+using ClassIsland.Core.Extensions.UI;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Shared.Models.Profile;
 using ClassIsland.Services;
@@ -27,7 +29,7 @@ namespace ClassIsland.Views;
 /// <summary>
 /// ClassChangingWindow.xaml 的交互逻辑
 /// </summary>
-public partial class ClassChangingWindow : MyWindow
+public partial class ClassChangingWindow : ViewBase
 {
     public ClassChangingViewModel ViewModel { get; } = IAppHost.GetService<ClassChangingViewModel>();
 
@@ -98,15 +100,15 @@ public partial class ClassChangingWindow : MyWindow
         var key = l[0].Key;
         if (!ViewModel.WriteToSourceClassPlan && !ClassPlan.IsOverlay && ViewModel.ProfileService.Profile.OverlayClassPlanId != null)
         {
-            var r = await new ContentDialog()
+            var r = await new FAContentDialog()
             {
                 Title = "覆盖当前的临时层",
                 Content = "当前已经存在一个临时层课表，如果继续换课，那么该临时层将被覆盖。是否继续？",
                 PrimaryButtonText = "继续",
                 SecondaryButtonText = "取消",
-                DefaultButton = ContentDialogButton.Primary
-            }.ShowAsync();
-            if (r != ContentDialogResult.Primary)
+                DefaultButton = FAContentDialogButton.Primary
+            }.ShowAsyncAuto();
+            if (r != FAContentDialogResult.Primary)
             {
                 return;
             }
@@ -175,8 +177,9 @@ public partial class ClassChangingWindow : MyWindow
 
     private void ButtonTemporaryClassPlan_OnClick(object sender, RoutedEventArgs e)
     {
-        App.GetService<ProfileSettingsWindow>().OpenDrawer("TemporaryClassPlan");
-        App.GetService<ProfileSettingsWindow>().Open();
+        var window = App.GetService<ProfileSettingsWindow>();
+        window.OpenDrawer("TemporaryClassPlan");
+        window.Open();
         Close();
     }
 

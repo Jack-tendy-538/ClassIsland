@@ -14,7 +14,6 @@ using Avalonia.Controls.Documents;
 using Avalonia.Controls.Metadata;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data.Core;
-using Avalonia.Diagnostics;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -185,8 +184,11 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
     public const string DefaultFontFamilyKey =
         "avares://ClassIsland/Assets/Fonts/#HarmonyOS Sans SC, avares://ClassIsland.Core/Assets/Fonts/#FluentSystemIcons-Resizable";
     
-    public static FontFamily DefaultFontFamily { get; }=
-        FontFamily.Parse(DefaultFontFamilyKey);
+    public static string PlatformDefaultFontFamilyKey =>
+        OperatingSystem.IsAndroid() ? FontFamily.Default.Name : DefaultFontFamilyKey;
+
+    public static FontFamily DefaultFontFamily { get; } =
+        FontFamily.Parse(PlatformDefaultFontFamilyKey);
 
     public NativeMenu MoreOptionsMenu { get; } = [];
 
@@ -229,9 +231,23 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         XamlThemeService = xamlThemeService;
         TutorialService = tutorialService;
         
+        this.UseMyWindowExt();
         ViewModel = new MainViewModel();
         DataContext = this;
         InitializeComponent();
+        InitializeContentVisibilityAnimation();
+        var span = SentrySdk.GetSpan()?.StartChild("startup-initialize-mainWindow");
+        ViewModel.Profile.PropertyChanged += (sender, args) => SaveProfile();
+        ViewModel.Settings.PropertyChanged += SettingsOnPropertyChanged;
+        LoadSettings();
+        //ViewModel.CurrentProfilePath = ViewModel.Settings.SelectedProfile;
+        LoadProfile();
+        IAppHost.GetService<ISplashService>().SetDetailedStatus("正在加载界面主题（1）");
+        // UpdateTheme();
+        UserPrefrenceUpdateStopwatch.Start();
+        AppBase.Current.PlatformSettings!.ColorValuesChanged += OnSystemEventsOnUserPreferenceChanged;
+        AppBase.Current.AppStopping += (sender, args) => AppBase.Current.PlatformSettings!.ColorValuesChanged -= OnSystemEventsOnUserPreferenceChanged;
+        span?.Finish();
         
         RenderOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
         RenderOptions.SetBitmapInterpolationMode(this, BitmapInterpolationMode.HighQuality);
@@ -252,7 +268,6 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         WindowRuleService.ForegroundWindowChanged += WindowRuleServiceOnForegroundWindowChanged;
         HighFreqTopmostRecheckTimer.Tick += HighFreqTopmostRecheckTimerOnTick;
         
-        this.UseMyWindowExt();
         
         if (OperatingSystem.IsWindows() && Environment.OSVersion.Version <= WindowsVersions.Win10V1803)
         {
@@ -329,7 +344,8 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
             }
         }
 #if DEBUG
-        MemoryProfiler.GetSnapshot("MainWindow OnContentRendered");
+        if (!System.OperatingSystem.IsAndroid())
+            MemoryProfiler.GetSnapshot("MainWindow OnContentRendered");
 #endif
         TutorialService.BeginNotCompletedTutorials("classisland.getStarted.welcome/init");
     }
@@ -348,18 +364,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        var span = SentrySdk.GetSpan()?.StartChild("startup-initialize-mainWindow");
-        ViewModel.Profile.PropertyChanged += (sender, args) => SaveProfile();
-        ViewModel.Settings.PropertyChanged += SettingsOnPropertyChanged;
-        LoadSettings();
-        //ViewModel.CurrentProfilePath = ViewModel.Settings.SelectedProfile;
-        LoadProfile();
-        IAppHost.GetService<ISplashService>().SetDetailedStatus("正在加载界面主题（1）");
-        // UpdateTheme();
-        UserPrefrenceUpdateStopwatch.Start();
-        AppBase.Current.PlatformSettings!.ColorValuesChanged += OnSystemEventsOnUserPreferenceChanged;
-        AppBase.Current.AppStopping += (sender, args) => AppBase.Current.PlatformSettings!.ColorValuesChanged -= OnSystemEventsOnUserPreferenceChanged;
-        span?.Finish();
+        
     }
     
     private void InitializeRawInputHandler()
@@ -493,6 +498,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         }
         UpdateTheme();
         UpdateStyleStates();
+        OnContentAnimationSettingsChanged(e.PropertyName);
         if (e.PropertyName is nameof(ViewModel.Settings.IsMouseInFadingReversed)
                            or nameof(ViewModel.Settings.IsMouseInFadingEnabled))
         {
@@ -509,6 +515,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
 
         if (e.PropertyName == nameof(ViewModel.IsEditMode))
         {
+            SynchronizeContentVisibility();
             PseudoClasses.Set(":edit-mode", ViewModel.IsEditMode);
             if (ViewModel.IsEditMode)
             {
@@ -591,7 +598,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
 
     private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
     {
-        
+        StartInitialContentVisibilityAnimation();
     }
 
     private void LayoutContainerGrid_OnSizeChanged(object? sender, SizeChangedEventArgs e)
@@ -873,7 +880,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         PlatformServices.WindowPlatformService.SetWindowFeature(this, WindowFeatures.Topmost, Topmost);
     }
 
-    private void OldWindowPosUpdateImpl(bool updateEffectWindow)
+    private void OldWindowPosUpdateImpl(bool updateEffectWindow, bool useRequestedHeight = false)
     {
         GetCurrentDpi(out var dpiX, out var dpiY);
 
@@ -902,21 +909,29 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         }
         var safeT = Math.Max(dockingTop ? Math.Min(verticalSafeAreaPx, oy) : verticalSafeAreaPx, 0) * scale;
         var safeB = Math.Max(dockingTop ? verticalSafeAreaPx : Math.Min(verticalSafeAreaPx, -oy), 0) * scale;
+        var contentHeight = RootLayoutTransformControl.Bounds.Height + safeT + safeB;
+        var renderSizeReserved = MainWindowStylesAssist.GetIsWindowRenderSizeReserved(this);
+        var renderHeight = renderSizeReserved ? Height : contentHeight;
         var x = screen.WorkingArea.X + ox;
         // 和 WPF 不同，Avalonia 定位窗口用的基于物理屏幕的像素坐标，而非逻辑坐标，无需 dpi 转换。
         var y = dockingTop 
             ? offsetAreaTop + oy - safeT
-            : offsetAreaBottom - ah + oy + safeB;
+            : offsetAreaBottom - (useRequestedHeight ? renderHeight * dpiY : ah) + oy + safeB;
         var clientBoundsRelative = new PixelRect(0, (int)(safeT * dpiY), (int)aw, (int)ah)
             .ToRectWithDpi(new Vector(dpiX * 96, dpiY * 96));
         ViewModel.ActualClientBound = clientBoundsRelative;
         if (LayoutContainerGrid != null)
         {
             LayoutContainerGrid.Width = Width = screen.Bounds.Width / dpiX;
-            LayoutContainerGrid.Height = Height = RootLayoutTransformControl.Bounds.Height + safeT + safeB;
+            Height = contentHeight;
+            LayoutContainerGrid.Height = renderSizeReserved
+                ? Height
+                : contentHeight;
         }
         ViewModel.ActualRootOffsetX = 0;
-        ViewModel.ActualRootOffsetY = 0;
+        ViewModel.ActualRootOffsetY = !dockingTop && renderSizeReserved
+            ? Math.Max(0, renderHeight - contentHeight)
+            : 0;
         var newPos = new PixelPoint((int)x, (int)y);
         if (Position != newPos)
         {
@@ -1004,7 +1019,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         LayoutContainerGrid.Height = height;
     }
     
-    private void UpdateWindowPos(bool updateEffectWindow=false)
+    private void UpdateWindowPos(bool updateEffectWindow = false, bool useRequestedHeight = false)
     {
         if (ViewModel.IsEditMode)
         {
@@ -1012,7 +1027,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         }
         else
         {
-            OldWindowPosUpdateImpl(updateEffectWindow);
+            OldWindowPosUpdateImpl(updateEffectWindow, useRequestedHeight);
         }
     }
     
@@ -1038,7 +1053,25 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
 
     private void MainWindow_OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        //UpdateWindowPos();
+        if (MainWindowStylesAssist.GetIsWindowRenderSizeReserved(this))
+        {
+            UpdateWindowPos(useRequestedHeight: true);
+        }
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == MainWindowStylesAssist.IsWindowRenderSizeReservedProperty &&
+            RootLayoutTransformControl != null && ViewModel is { IsClosing: false })
+        {
+            UpdateNotificationRenderSize();
+        }
+    }
+
+    internal void UpdateNotificationRenderSize()
+    {
+        UpdateWindowPos(useRequestedHeight: true);
     }
 
     private void MainWindow_OnActivated(object? sender, EventArgs e)
@@ -1129,8 +1162,9 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
     
     private void MenuItemTemporaryClassPlan_OnClick(object sender, EventArgs e)
     {
-        App.GetService<ProfileSettingsWindow>().OpenDrawer("TemporaryClassPlan");
-        OpenProfileSettingsWindow();
+        var window = App.GetService<ProfileSettingsWindow>();
+        window.OpenDrawer("TemporaryClassPlan");
+        window.Open();
     }
     
     private void MenuItemAbout_OnClick(object sender, EventArgs e)
@@ -1202,7 +1236,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
     private async void NativeMenuItemDebugEnableTempClassPlan_OnClick(object? sender, EventArgs e)
     {
         var input = new TextBox();
-        var dialog = new TaskDialog()
+        var dialog = new FATaskDialog()
         {
             Header = "启用临时课表",
             Content = new StackPanel()
@@ -1220,7 +1254,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
             XamlRoot = this,
             Buttons =
             {
-                TaskDialogButton.OKButton
+                FATaskDialogButton.OKButton
             }
         };
         await dialog.ShowAsync();
@@ -1238,6 +1272,11 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
     private void NativeMenuItemDebugDevPortal_OnClick(object? sender, EventArgs e)
     {
         IAppHost.GetService<DevPortalWindow>().Show();
+    }
+
+    private void NativeMenuItemDebugOpenMainView_OnClick(object? sender, EventArgs e)
+    {
+        IAppHost.GetService<MainView>().Show();
     }
     
     private void NativeMenuItemDebugOpenWelcomeWindow_OnClick(object? sender, EventArgs e)
@@ -1282,8 +1321,9 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         }
         if (LessonsService.CurrentClassPlan == null) // 如果今天没有课程，则选择临时课表
         {
-            App.GetService<ProfileSettingsWindow>().OpenDrawer("TemporaryClassPlan");
-            OpenProfileSettingsWindow();
+            var window = App.GetService<ProfileSettingsWindow>();
+            window.OpenDrawer("TemporaryClassPlan");
+            window.Open();
             return;
         }
 
@@ -1297,7 +1337,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         {
             ClassPlan = LessonsService.CurrentClassPlan
         };
-        await ClassChangingWindow.ShowDialog(this);
+        await ClassChangingWindow.ShowModal(this);
         ClassChangingWindow.DataContext = null;
         ClassChangingWindow = null;
         // ViewModel.IsBusy = false;
@@ -1644,7 +1684,7 @@ public partial class MainWindow : Window, ITopmostEffectPlayer
         ViewModel.EditModeTutorialPhase = 0;
     }
     
-    private void TeachingTipEditModeP4_OnCloseButtonClick(TeachingTip sender, EventArgs args)
+    private void TeachingTipEditModeP4_OnCloseButtonClick(FATeachingTip sender, EventArgs args)
     {
         ViewModel.Settings.HasEditModeTutorialShown = true;
     }

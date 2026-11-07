@@ -11,7 +11,7 @@ public class ToastMessage : ObservableRecipient
     private bool _isOpen = true;
     private string _message = "";
     private string _title = "";
-    private InfoBarSeverity _severity = InfoBarSeverity.Informational;
+    private FAInfoBarSeverity _severity = FAInfoBarSeverity.Informational;
     private object? _actionContent;
 
     /// <summary>
@@ -60,7 +60,7 @@ public class ToastMessage : ObservableRecipient
     /// <summary>
     /// 消息重要程度
     /// </summary>
-    public InfoBarSeverity Severity
+    public FAInfoBarSeverity Severity
     {
         get => _severity;
         init => SetProperty(ref _severity, value);

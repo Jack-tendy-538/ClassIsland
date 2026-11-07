@@ -18,7 +18,7 @@ namespace ClassIsland.Core.Abstractions.Behaviors;
 /// </summary>
 /// <typeparam name="T">The item type contained by the target <see cref="DataGrid"/>.</typeparam>
 public abstract class BaseDataGridDropHandler<T> : DropHandlerBase
-    where T : class
+    where T : notnull
 {
     private const string RowDraggingUpStyleClass = "DraggingUp";
     private const string RowDraggingDownStyleClass = "DraggingDown";
@@ -43,12 +43,12 @@ public abstract class BaseDataGridDropHandler<T> : DropHandlerBase
     /// <inheritdoc />
     public override bool Validate(object? sender, DragEventArgs e, object? sourceContext, object? targetContext, object? state)
     {
-        if (e.Source is Control c && sender is DataGrid dg)
+        if (sender is DataGrid dg)
         {
             var valid = Validate(dg, e, sourceContext, targetContext, false);
             if (valid)
             {
-                var row = FindDataGridRowFromChildView(c);
+                var row = FindDataGridRowAtPointer(dg, e);
                 if (row is not null)
                 {
                     var isDirectionUp = e.GetPosition(row).Y < row.Bounds.Height / 2;
@@ -65,12 +65,15 @@ public abstract class BaseDataGridDropHandler<T> : DropHandlerBase
     /// <inheritdoc />
     public override bool Execute(object? sender, DragEventArgs e, object? sourceContext, object? targetContext, object? state)
     {
-        ClearDraggingStyleFromAllRows(sender);
-        if (e.Source is Control && sender is DataGrid dg)
+        try
         {
-            return Validate(dg, e, sourceContext, targetContext, true);
+            return sender is DataGrid dg
+                && Validate(dg, e, sourceContext, targetContext, true);
         }
-        return false;
+        finally
+        {
+            ClearDraggingStyleFromAllRows(sender);
+        }
     }
 
     /// <inheritdoc />
@@ -103,10 +106,10 @@ public abstract class BaseDataGridDropHandler<T> : DropHandlerBase
 
         var insertIndex = targetIndex;
 
-        if (e.Source is Control c)
+        var row = FindDataGridRowAtPointer(dg, e);
+        if (row is not null)
         {
-            var row = FindDataGridRowFromChildView(c);
-            if (row is not null && e.GetPosition(row).Y > row.Bounds.Height / 2)
+            if (e.GetPosition(row).Y > row.Bounds.Height / 2)
             {
                 insertIndex = targetIndex + 1;
             }
@@ -134,7 +137,11 @@ public abstract class BaseDataGridDropHandler<T> : DropHandlerBase
                 {
                     if (execute)
                     {
-                        MoveItem(items, sourceIndex, adjustedTargetIndex);
+                        if (sourceIndex != adjustedTargetIndex)
+                        {
+                            items.Move(sourceIndex, adjustedTargetIndex);
+                            dg.CollectionView?.Refresh();
+                        }
                         dg.SelectedIndex = adjustedTargetIndex;
                     }
                     return true;
@@ -153,9 +160,23 @@ public abstract class BaseDataGridDropHandler<T> : DropHandlerBase
         }
     }
 
-    private static DataGridRow? FindDataGridRowFromChildView(StyledElement sourceChild)
+    private static DataGridRow? FindDataGridRowFromChildView(Visual sourceChild)
     {
-        return sourceChild.FindLogicalAncestorOfType<DataGridRow>();
+        return sourceChild as DataGridRow
+            ?? sourceChild.FindAncestorOfType<DataGridRow>()
+            ?? sourceChild.FindLogicalAncestorOfType<DataGridRow>();
+    }
+
+    private static DataGridRow? FindDataGridRowAtPointer(DataGrid dataGrid, DragEventArgs e)
+    {
+        if (dataGrid.GetVisualAt(e.GetPosition(dataGrid)) is Visual target)
+        {
+            return FindDataGridRowFromChildView(target);
+        }
+
+        return e.Source is Visual source
+            ? FindDataGridRowFromChildView(source)
+            : null;
     }
 
     private static DataGridRowsPresenter? GetRowsPresenter(Visual v)

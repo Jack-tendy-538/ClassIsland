@@ -2,7 +2,9 @@ using System;
 using System.Windows; 
 using Avalonia.Interactivity;
 using ClassIsland.Core;
+using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Controls;
+using ClassIsland.Core.Helpers.UI;
 using ClassIsland.ViewModels;
 using ClassIsland.Views.RecoveryPages;
 using FluentAvalonia.UI.Navigation;
@@ -12,11 +14,13 @@ namespace ClassIsland.Views;
 /// <summary>
 /// RecoveryWindow.xaml 的交互逻辑
 /// </summary>
-public partial class RecoveryWindow : MyWindow
+public partial class RecoveryWindow : ViewBase
 {
     public static RecoveryWindow? Instance { get; private set; }
 
     public event EventHandler? CompleteInitialized;
+
+    internal bool OpenBackupOnStartup { get; init; }
 
     public RecoveryViewModel ViewModel { get; } = new();
 
@@ -24,10 +28,11 @@ public partial class RecoveryWindow : MyWindow
     {
         Instance = this;
         InitializeComponent();
+        FaFrameLifetimeHelper.Attach(MainFrame);
         DataContext = this;
     }
 
-    private void RecoveryWindow_OnClosed(object? sender, EventArgs e)
+    private void RecoveryWindow_OnClosed(object? sender, RoutedEventArgs e)
     {
         AppBase.Current.Stop();
     }
@@ -45,11 +50,18 @@ public partial class RecoveryWindow : MyWindow
         {
             MainFrame = MainFrame
         };
-        home.Loaded += (o, args) => CompleteInitialized?.Invoke(this, EventArgs.Empty);
-        MainFrame.Content = home;
+        var initialPage = OpenBackupOnStartup
+            ? new RecoverBackupPage
+            {
+                MainFrame = MainFrame,
+                LastPage = home
+            }
+            : (Avalonia.Controls.UserControl)home;
+        initialPage.Loaded += (o, args) => CompleteInitialized?.Invoke(this, EventArgs.Empty);
+        MainFrame.Content = initialPage;
     }
 
-    private void NavigationServiceOnNavigated(object sender, NavigationEventArgs e)
+    private void NavigationServiceOnNavigated(object sender, FANavigationEventArgs e)
     {
         ViewModel.CanGoBack = MainFrame.CanGoBack;
     }

@@ -14,6 +14,8 @@ using ClassIsland.Core.Abstractions.Services.Management;
 using ClassIsland.Core.Controls;
 using ClassIsland.Shared;
 using ClassIsland.Models;
+using ClassIsland.Models.Profile;
+using ClassIsland.ViewModels;
 using ClassIsland.Services;
 using ClassIsland.Services.AppUpdating;
 using ClassIsland.Services.Management;
@@ -44,22 +46,28 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Abstractions.Services.SpeechService;
+using ClassIsland.Core.Abstractions.Services.UI;
 using ClassIsland.Core.Assists;
 using ClassIsland.Core.Controls.IconSources;
 using ClassIsland.Core.Enums;
 using ClassIsland.Core.Helpers;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Services;
+using ClassIsland.Core.Services.UI;
 using ClassIsland.Enums;
 using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Platforms.Abstraction.Enums;
 using ClassIsland.Platforms.Abstraction.Models;
+using ClassIsland.Services.UI;
 using ClassIsland.Shared.Protobuf.AuditEvent;
 using ClassIsland.Shared.Protobuf.Enum;
 using FluentAvalonia.UI.Controls;
+using FluentAvalonia.UI.Windowing;
 using HotAvalonia;
 using Empty = Google.Protobuf.WellKnownTypes.Empty;
 
@@ -73,6 +81,10 @@ public partial class App : AppBase, IAppHost
     private const string BuildTypeInternal =
 #if SelfContained
         "selfContained";
+#elif AoT
+        "aot";
+#elif MonoAoT
+        "monoaot";
 #else
         "full";
 #endif
@@ -89,6 +101,7 @@ public partial class App : AppBase, IAppHost
     public bool IsSentryEnabled { get; set; } = false;
 
     private bool _isStartedCompleted = false;
+    private bool _isProfileLoadFailed;
 
     internal static bool IsCrashed { get; set; } = false;
 
@@ -168,6 +181,12 @@ public partial class App : AppBase, IAppHost
             return;
         }
 
+        if (System.OperatingSystem.IsAndroid())
+        {
+            PackagingType = "apk";
+            return;
+        }
+
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath) ?? "./";
         var packageTypeDir = Path.Combine(Environment.GetEnvironmentVariable("ClassIsland_PackageRoot") ?? exeDir,
             "PackageType");
@@ -211,7 +230,7 @@ public partial class App : AppBase, IAppHost
         CommonDirectories.AppRootFolderPath = PackagingType switch
         {
             "folder" => Path.Combine(CommonDirectories.AppPackageRoot, "data"),
-            "installer" or "deb" or "appImage" or "pkg" or "msix" => Path.GetFullPath(Path.Combine(
+            "installer" or "deb" or "appImage" or "pkg" or "msix" or "apk" => Path.GetFullPath(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClassIsland", "Data")),
             _ => System.OperatingSystem.IsMacOS() ? Path.GetFullPath(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClassIsland", "Data")) :
@@ -222,6 +241,8 @@ public partial class App : AppBase, IAppHost
         {
             Directory.CreateDirectory(CommonDirectories.AppRootFolderPath);
         }
+
+        PlatformServices.BlobRootFolderPath = CommonDirectories.AppBlobFolderPath;
 
         if (File.Exists(Path.Combine(CommonDirectories.AppPackageRoot, "ClassIsland" + PlatformExecutableExtension)))
         {
@@ -239,7 +260,7 @@ public partial class App : AppBase, IAppHost
         Environment.CurrentDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? "./";
         ActivatePackageType();
         ActivateAppDirectories();
-        if (!Design.IsDesignMode && !System.OperatingSystem.IsMacOS())
+        if (!Design.IsDesignMode && !System.OperatingSystem.IsMacOS() && !System.OperatingSystem.IsAndroid())
         {
             this.EnableHotReload();
         }
@@ -251,18 +272,22 @@ public partial class App : AppBase, IAppHost
         IconExpressionHelper.RegisterHandler("fluent", args => new FluentIconSource(args[0]));
         IconExpressionHelper.RegisterHandler("lucide", args => new LucideIconSource(args[0]));
         IconExpressionHelper.RegisterHandler("sfsymbols", args => new SFSymbolsIconSource(args[0]));
-        IconExpressionHelper.RegisterHandler("bitmap", args => new BitmapIconSource
+        IconExpressionHelper.RegisterHandler("bitmap", args => new FABitmapIconSource
         {
             UriSource = new Uri(args[0]),
             ShowAsMonochrome = args.Length >= 2  && bool.TryParse(args[2], out var r1) && r1
         });
         IconExpressionHelper.RegisterHandler("sticker", args => 
             IAppHost.TryGetService<IManagementService>()?.Policy.DisableEasterEggs == true
-            ? args.Length >= 2 ? IconExpressionHelper.TryParseOrNull(args[1]) : new FontIconSource()
+            ? args.Length >= 2 ? IconExpressionHelper.TryParseOrNull(args[1]) : new FAFontIconSource()
             : new AdvancedImageIconSource()
             {
                 Uri = Uri.TryCreate(args[0], UriKind.Absolute, out var uri) ? uri.ToString() : $"avares://ClassIsland/Assets/HoYoStickers/{args[0]}.png"
             });
+        IconExpressionHelper.RegisterHandler("img", args => new AdvancedImageIconSource()
+        {
+            Uri = args[0]
+        });
         SentrySdk.ConfigureScope(s =>
         {
             s.SetTag("subChannel", AppSubChannel);
@@ -287,7 +312,8 @@ public partial class App : AppBase, IAppHost
 
     private static void InitPopup(Popup popup)
     {
-        if (popup.Child is not { Width: 0, Height: 0 } || popup.Child.GetVisualRoot() is not WindowBase topLevel)
+        if (popup.Child is not { Width: 0, Height: 0 } child ||
+            TopLevel.GetTopLevel(child) is not WindowBase topLevel)
         {
             return;
         }
@@ -426,7 +452,7 @@ public partial class App : AppBase, IAppHost
                 AllowIgnore = _isStartedCompleted && !critical,
                 IsCritical = critical
             };
-            await CrashWindow.ShowDialog(GetRootWindow());
+            await CrashWindow.ShowModal();
             return;
         }
 
@@ -483,13 +509,49 @@ public partial class App : AppBase, IAppHost
                                               || AvaloniaUnsafeAccessorHelpers.GetActiveWin32CompositionMode() 
                                                     != Win32CompositionMode.WinUIComposition;
         }
+
+        if (IThemeService.UseNativeTitlebar)
+        {
+            var property = Window.ExtendClientAreaToDecorationsHintProperty;
+            var propertyType = typeof(AvaloniaProperty);
+            var metadataField = propertyType
+                .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+                .First(x => x.Name == "_metadata");
+            var metadata = metadataField.GetValue(property) as Dictionary<Type, AvaloniaPropertyMetadata>;
+            var appWindowType = typeof(FAAppWindow);
+            if (metadata?.ContainsKey(appWindowType) ?? false)
+            {
+                metadata[appWindowType] = new StyledPropertyMetadata<bool>(false);
+            }
+        }
     }
 
     private async void DesktopLifetimeOnStartup(object? sender, ControlledApplicationLifetimeStartupEventArgs e)
     {
+        Init();
+    }
 
-        CreatePhonyRootWindow();
-        PlatformServices.WindowPlatformService.SetWindowFeature(PhonyRootWindow, WindowFeatures.ToolWindow | WindowFeatures.SkipManagement | WindowFeatures.Transparent, true);
+    internal async void Init()
+    {
+        AppBase.CurrentLifetime = ClassIsland.Core.Enums.ApplicationLifetime.Initializing;
+        if (System.OperatingSystem.IsAndroid() || System.OperatingSystem.IsIOS() || ApplicationCommand.Mobile)
+        {
+            Styles.Add(new Style(x => x.OfType<ComboBox>())
+            {
+                Setters = { new Setter(ComboBoxAssist.UseDrawerProperty, true) }
+            });
+        }
+        var isDesktop = System.OperatingSystem.IsWindows() || System.OperatingSystem.IsMacOS() || System.OperatingSystem.IsLinux();
+        if (isDesktop)
+        {
+            IViewHostProvider.Instance = new WindowViewHostProvider(ApplicationCommand.Mobile);
+        }
+        
+        if (isDesktop)
+        {
+            CreatePhonyRootWindow();
+            PlatformServices.WindowPlatformService.SetWindowFeature(PhonyRootWindow, WindowFeatures.ToolWindow | WindowFeatures.SkipManagement | WindowFeatures.Transparent, true);
+        }
         Initialized?.Invoke(this, EventArgs.Empty);
         var transaction = SentrySdk.StartTransaction(
             "startup",
@@ -497,7 +559,6 @@ public partial class App : AppBase, IAppHost
         );
         SentrySdk.ConfigureScope(s => s.Transaction = transaction);
         var spanPreInit = transaction.StartChild("startup-init");
-        AppBase.CurrentLifetime = ClassIsland.Core.Enums.ApplicationLifetime.Initializing;
         Dispatcher.UIThread.UnhandledException += App_OnDispatcherUnhandledException;
         MyWindow.ShowOssWatermark = ApplicationCommand.ShowOssWatermark;
         //DependencyPropertyHelper.ForceOverwriteDependencyPropertyDefaultValue(FrameworkElement.FocusVisualStyleProperty,
@@ -512,7 +573,7 @@ public partial class App : AppBase, IAppHost
         Thread.CurrentThread.CurrentUICulture = new CultureInfo("zh-CN");
         Thread.CurrentThread.CurrentCulture = new CultureInfo("zh-CN");
 
-        // 检测Mutex
+        // 检测 Mutex
         if (!IsMutexCreateNew && !Design.IsDesignMode)
         {
             if (!ApplicationCommand.WaitMutex)
@@ -532,11 +593,32 @@ public partial class App : AppBase, IAppHost
                 return;
             }
         }
+        
+#if RELEASE
+        // TODO: 退出 DP 后记得删
+        await new FATaskDialog()
+        {
+            Title = "ClassIsland",
+            Header = "欢迎使用 2.2-Misha Developer Preview",
+            Content = "此版本仅供开发人员进行早期预览，稳定性欠佳，不适用于生产环境或日常使用。如果您在使用的过程中遇到问题，欢迎前往 GitHub issues 上提交 issue！",
+            IconSource = new AdvancedImageIconSource()
+            {
+                Uri = "avares://ClassIsland/Assets/HoYoStickers/米沙_欢迎光临.png"
+            },
+            XamlRoot = GetRootWindow(),
+            Buttons = [
+                new FATaskDialogButton("确定", true)
+                {
+                    IsDefault = true
+                }
+            ]
+        }.ShowAsync();
+#endif
 
         // 检测临时目录
         if (Environment.CurrentDirectory.Contains(Path.GetTempPath()))
         {
-            await CommonTaskDialogs.ShowDialog("检测到应用正在临时目录下运行", "ClassIsland正在临时目录下运行，应用设置、课表等数据很可能无法保存，或在应用退出后被自动删除。在使用本应用前，请务必将本应用解压到一个适合的位置。");
+            await CommonTaskDialogs.ShowDialog("检测到应用正在临时目录下运行", "ClassIsland 正在临时目录下运行，应用设置、课表等数据很可能无法保存，或在应用退出后被自动删除。在使用本应用前，请务必将本应用解压到一个适合的位置。");
             Environment.Exit(0);
             return;
         }
@@ -544,7 +626,7 @@ public partial class App : AppBase, IAppHost
         // 检测桌面文件夹
         if (Environment.CurrentDirectory == Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) && !Settings.IsWelcomeWindowShowed)
         {
-            var r = await CommonTaskDialogs.ShowDialog("检测到正在桌面上运行", "ClassIsland正在桌面上运行，应用设置、课表等数据将会直接存放到桌面上。在使用本应用前，请将本应用移动到一个单独的文件夹中。");
+            var r = await CommonTaskDialogs.ShowDialog("检测到正在桌面上运行", "ClassIsland 正在桌面上运行，应用设置、课表等数据将会直接存放到桌面上。在使用本应用前，请将本应用移动到一个单独的文件夹中。");
             if (r == (object)true)
             {
                 Environment.Exit(0);
@@ -561,7 +643,7 @@ public partial class App : AppBase, IAppHost
         }
         catch (Exception ex)
         {
-            await CommonTaskDialogs.ShowDialog("目录权限错误", $"ClassIsland无法写入当前目录：{ex.Message}"+Environment.NewLine+Environment.NewLine+"请将本软件解压到一个合适的位置后再运行。");
+            await CommonTaskDialogs.ShowDialog("目录权限错误", $"ClassIsland 无法写入当前目录：{ex.Message}"+Environment.NewLine+Environment.NewLine+"请将本软件解压到一个合适的位置后再运行。");
             Environment.Exit(0);
             return;
         }
@@ -573,15 +655,15 @@ public partial class App : AppBase, IAppHost
         if (startupCount >= 5 && ApplicationCommand is { Recovery: false, Quiet: false })
         {
             Logger?.LogDebug("应用多次启动失败。startupCount={startupCount}",startupCount);
-            var dialog = new TaskDialog()
+            var dialog = new FATaskDialog()
             {
                 Title = "进入恢复模式",
                 Content = "ClassIsland 多次启动失败，您需要进入恢复模式以尝试修复 ClassIsland 吗？",
                 XamlRoot = GetRootWindow(),
                 Buttons =
                 [
-                    new TaskDialogButton("取消", false),
-                    new TaskDialogButton("进入恢复模式", true)
+                    new FATaskDialogButton("取消", false),
+                    new FATaskDialogButton("进入恢复模式", true)
                     {
                         IsDefault = true
                     }
@@ -594,7 +676,7 @@ public partial class App : AppBase, IAppHost
             }
         }
         // 恢复模式
-        if (ApplicationCommand.Recovery)
+        if (ApplicationCommand.Recovery || ApplicationCommand.RecoverBackup)
         {
             Logger?.LogInformation("进入恢复模式");
             if (File.Exists(startupCountFilePath))
@@ -602,7 +684,10 @@ public partial class App : AppBase, IAppHost
                 File.Delete(startupCountFilePath);
             }
             
-            var recoveryWindow = new RecoveryWindow();
+            var recoveryWindow = new RecoveryWindow
+            {
+                OpenBackupOnStartup = ApplicationCommand.RecoverBackup
+            };
             recoveryWindow.Show();
             transaction.Finish();
             return;
@@ -628,7 +713,7 @@ public partial class App : AppBase, IAppHost
 
         IAppHost.Host = Microsoft.Extensions.Hosting.Host
             .CreateDefaultBuilder()
-            .UseContentRoot(AppContext.BaseDirectory)
+            .UseContentRoot(System.OperatingSystem.IsAndroid() ? CommonDirectories.AppRootFolderPath : AppContext.BaseDirectory)
             .ConfigureServices(ConfigureServices)
             .Build();
         AppBase.CurrentLifetime = ClassIsland.Core.Enums.ApplicationLifetime.StartingOffline;
@@ -637,7 +722,7 @@ public partial class App : AppBase, IAppHost
         if (App.ApplicationCommand.Diagnostic)
         {
             var diagService = GetService<DiagnosticService>();
-            Logger.LogInformation("诊断模式已启用!");
+            Logger.LogInformation("诊断模式已启用！");
             Logger.LogDebug("{DiagnosticMessage}", diagService.GetDiagnosticInfo());
         }
         foreach (var plugin in PluginService.PluginLoadedStatus.Where(p => p.LoadStatus == PluginLoadStatus.Error))
@@ -663,7 +748,10 @@ public partial class App : AppBase, IAppHost
             AppDomain.CurrentDomain.AssemblyLoad += (o, args) => Logger.LogTrace("加载程序集：{AssemblyFullName} ({AssemblyLocation})", args.LoadedAssembly.FullName, args.LoadedAssembly.Location);
         }
 #if DEBUG
-        MemoryProfiler.GetSnapshot("Host built");
+        if (!System.OperatingSystem.IsAndroid())
+        {
+            MemoryProfiler.GetSnapshot("Host built");
+        }
 #endif
         spanHostBuilding.Finish();
         spanPreInit.Finish();
@@ -700,13 +788,13 @@ public partial class App : AppBase, IAppHost
         Settings.IsSystemSpeechSystemExist = isSystemSpeechSystemExist;
         Settings.DiagnosticStartupCount++;
 
-        // 记录MLE
+        // 记录 MLE
         if (ApplicationCommand.PrevSessionMemoryKilled)
         {
             Settings.DiagnosticMemoryKillCount++;
             Settings.DiagnosticLastMemoryKillTime = DateTime.Now;
             #if !DEBUG
-            Logger.LogWarning($"上次会话因MLE结束。MemoryKillCount={Settings.DiagnosticMemoryKillCount}");
+            Logger.LogWarning($"上次会话因 MLE 结束。MemoryKillCount={Settings.DiagnosticMemoryKillCount}");
             #endif
         }
         spanLoadingSettings.Finish();
@@ -750,7 +838,28 @@ public partial class App : AppBase, IAppHost
         GetService<ISplashService>().CurrentProgress = 45;
 
         GetService<ISplashService>().SetDetailedStatus("正在加载档案");
-        await GetService<IProfileService>().LoadProfileAsync();
+        try
+        {
+            await GetService<IProfileService>().LoadProfileAsync();
+        }
+        catch (ProfileLoadException exception)
+        {
+            _isProfileLoadFailed = true;
+            await GetService<ISplashService>().EndSplash();
+            var isManaged = GetService<IManagementService>().IsManagementEnabled;
+            var recovery = new ProfileRecoveryViewModel(
+                isManaged ? "_management-profile.json" : Settings.SelectedProfile,
+                isManaged, exception is ProfileDowngradeException,
+                GetService<SettingsService>(), GetService<ILogger<ProfileRecoveryViewModel>>());
+            await new ProfileRecoveryWindow(recovery).ShowModal();
+            if (recovery.RestoreBackupRequested)
+                Restart(["-m", "--recovery", "--recover-backup"]);
+            else if (recovery.ResultProfile != null)
+                Restart();
+            else
+                Stop();
+            return;
+        }
         GetService<IWeatherService>();
         GetService<IExactTimeService>();
         await GetService<IComponentsService>().LoadManagementConfig();
@@ -773,7 +882,7 @@ public partial class App : AppBase, IAppHost
 
             if (System.OperatingSystem.IsLinux() && GlobalStorageService.GetValue("IgnoreQtScaling") != "1")
             {
-                var dialog = new TaskDialog()
+                var dialog = new FATaskDialog()
                 {
                     Title = "ClassIsland",
                     Header = "当前界面缩放是否正常？",
@@ -781,8 +890,8 @@ public partial class App : AppBase, IAppHost
                     XamlRoot = GetRootWindow(),
                     Buttons =
                     [
-                        new TaskDialogButton("正常", false),
-                        new TaskDialogButton("不正常", true)
+                        new FATaskDialogButton("正常", false),
+                        new FATaskDialogButton("不正常", true)
                     ],
                 };
                 var r = await dialog.ShowAsync();
@@ -793,12 +902,13 @@ public partial class App : AppBase, IAppHost
                     return;
                 }
             }
+
             var w = IAppHost.GetService<WelcomeWindow>();
             if (ApplicationCommand.Refreshing)
             {
                 w.SetWelcomeExperience(true, ApplicationCommand.Onboarding, true);
             }
-            await w.ShowDialog(PhonyRootWindow);
+            await w.ShowModal();
             if (w is { IsOnboarding: true, ViewModel.IsManuallyRestarted: false })
             {
                 if (!w.ViewModel.IsWizardCompleted)
@@ -819,111 +929,44 @@ public partial class App : AppBase, IAppHost
             }
         }
 
-        // 如果不是开发构建, 则自动重置部分可能影响使用的调试选项
+        // 如果不是开发构建，则自动重置部分可能影响使用的调试选项
         #if !DEBUG
         Settings.IsMainWindowDebugEnabled = false;
         #endif
         
         var spanLoadMainWindow = spanLaunching.StartChild("span-loading-mainWindow");
-        Logger.LogInformation("正在初始化MainWindow。");
+        Logger.LogInformation("正在初始化 MainWindow。");
         GetService<ISplashService>().SetDetailedStatus("正在启动主界面所需的服务");
         GetService<ISplashService>().CurrentProgress = 55;
 #if DEBUG
-        MemoryProfiler.GetSnapshot("Pre MainWindow init");
+        if (!System.OperatingSystem.IsAndroid())
+            MemoryProfiler.GetSnapshot("Pre MainWindow init");
 #endif
-        var mw = GetService<MainWindow>();
-        MainWindow = mw;
-        mw.StartupCompleted += (o, args) =>
+        if (isDesktop)
         {
-            GetService<ISplashService>().CurrentProgress = 98;
-            GetService<ISplashService>().SetDetailedStatus("正在进行启动后操作");
-            // 由于在应用启动时调用 WMI 会导致无法使用触摸，故在应用启动完成后再获取设备统计信息。
-            // https://github.com/dotnet/wpf/issues/9752
-            if (IsSentryEnabled)
-            {
-                DiagnosticService.GetDeviceInfo(out var name, out var vendor);
-                SentrySdk.ConfigureScope(s =>
-                {
-                    s.SetTag("deviceDesktop.name", name);
-                    s.SetTag("deviceDesktop.vendor", vendor);
-                });
-            }
-            AppStarted?.Invoke(this, EventArgs.Empty);
-            GetService<IIpcService>().IpcProvider.StartServer();
-            GetService<IIpcService>().JsonRoutedProvider.StartServer();
-            spanLoadMainWindow.Finish();
-            transaction.Finish();
-            SentrySdk.ConfigureScope(s => s.Transaction = null);
-            GetService<IAutomationService>();
-            GetService<IRulesetService>().NotifyStatusChanged();
-            File.Delete(startupCountFilePath);
-            if (ConfigureFileHelper.Errors.FirstOrDefault(x => x.Critical) != null)
-            {
-                PlatformServices.DesktopToastService.ShowToastAsync("配置文件损坏", "ClassIsland 部分配置文件已损坏且无法加载，这些配置文件已恢复至默认值。点击此消息以查看详细信息和从过往备份中恢复配置文件。", () => GetService<IUriNavigationService>().NavigateWrapped(new Uri("classisland://app/config-errors")));
-            }
-            if (Settings.CorruptPluginsDisabledLastSession)
-            {
-                Settings.CorruptPluginsDisabledLastSession = false;
-                var content = new DesktopToastContent()
-                {
-                    Title = "已自动禁用异常插件",
-                    Body = "ClassIsland 已自动禁用导致上次崩溃的插件。您可以在排除问题后前往【应用设置】->【插件】中重新启用这些插件，或在【应用设置】->【基本】中调整是否自动禁用异常插件。",
-                    Buttons =
-                    {
-                        {
-                            "打开插件设置",
-                            () => GetService<IUriNavigationService>()
-                                .NavigateWrapped(new Uri("classisland://app/settings/classisland.plugins"))
-                        },
-                        {
-                            "管理异常插件行为",
-                            () => GetService<IUriNavigationService>()
-                                .NavigateWrapped(new Uri("classisland://app/settings/general"))
-                        }
-                    }
-                };
-                content.Activated += (_, _) => GetService<IUriNavigationService>()
-                    .NavigateWrapped(new Uri("classisland://app/settings/classisland.plugins"));
-                PlatformServices.DesktopToastService.ShowToastAsync(content);
-            }
-
-            if (Settings.IsSplashEnabled)
-            {
-                App.GetService<ISplashService>().EndSplash();
-            }
-            if (IAppHost.TryGetService<IManagementService>() is IManagementService { IsManagementEnabled: true, Connection: ManagementServerConnection connection })
-            {
-                connection.LogAuditEvent(AuditEvents.AppStarted, new Empty());
-            }
-            _isStartedCompleted = true;
-            AppBase.CurrentLifetime = ClassIsland.Core.Enums.ApplicationLifetime.Running;
-            if (ApplicationCommand.ImportComplete)
-            {
-                var dtWindow = new DataTransferWindow()
-                {
-                    ImportName = "ClassIsland"
-                };
-                dtWindow.Show();
-                dtWindow.ImportComplete(ApplicationCommand.ImportV1Complete);
-            }
-        };
+            var mw = GetService<MainWindow>();
+            MainWindow = mw;
+            mw.StartupCompleted += (o, args) => PostStartup(spanLoadMainWindow, transaction, startupCountFilePath);
+            GetService<ISplashService>().CurrentProgress = 80;
+            GetService<ISplashService>().SetDetailedStatus("正在初始化主界面（步骤 2/2）");
 #if DEBUG
-        MemoryProfiler.GetSnapshot("Pre MainWindow show");
+        if (!System.OperatingSystem.IsAndroid())
+            MemoryProfiler.GetSnapshot("Pre MainWindow show");
 #endif
-        GetService<ISplashService>().CurrentProgress = 80;
-        GetService<ISplashService>().SetDetailedStatus("正在初始化主界面（步骤 2/2）");
-        if (!Design.IsDesignMode)
-        {
-            mw.Show();
+            if (!Design.IsDesignMode)
+            {
+                mw.Show();
+            }
         }
+        
         GetService<IWindowRuleService>();
         GetService<SignalTriggerHandlerService>();
 
-        // 注册uri导航
+        // 注册 uri 导航
         var uriNavigationService = GetService<IUriNavigationService>();
         uriNavigationService.HandleAppNavigation("test", args => _ = CommonTaskDialogs.ShowDialog("测试导航", $"{args.Uri}"));
         uriNavigationService.HandleAppNavigation("settings", args => GetService<SettingsWindowNew>().OpenUri(args.Uri));
-        uriNavigationService.HandleAppNavigation("profile", args => GetService<MainWindow>().OpenProfileSettingsWindow(args.Uri));
+        uriNavigationService.HandleAppNavigation("profile", args => GetService<ProfileSettingsWindow>().Open(args.Uri));
         uriNavigationService.HandleAppNavigation("helps", args => uriNavigationService.Navigate(new Uri("https://docs.classisland.tech/app/")));
         // uriNavigationService.HandleAppNavigation("profile/import-excel", args => GetService<ExcelImportWindow>().Show());
         // uriNavigationService.HandleAppNavigation("config-errors", args => GetService<ConfigErrorsWindow>().ShowDialog());
@@ -964,23 +1007,106 @@ public partial class App : AppBase, IAppHost
             Stop();
             return;
         }
+
+        if (!isDesktop)
+        {
+            PostStartup(spanLoadMainWindow, transaction, startupCountFilePath);
+            var mv = GetService<MainView>();
+            mv.Show();
+        }
+    }
+
+    private void PostStartup(ISpan spanLoadMainWindow, ITransactionTracer transaction, string startupCountFilePath)
+    {
+        GetService<ISplashService>().CurrentProgress = 98;
+        GetService<ISplashService>().SetDetailedStatus("正在进行启动后操作");
+        // 由于在应用启动时调用 WMI 会导致无法使用触摸，故在应用启动完成后再获取设备统计信息。
+        // https://github.com/dotnet/wpf/issues/9752
+        if (IsSentryEnabled)
+        {
+            DiagnosticService.GetDeviceInfo(out var name, out var vendor);
+            SentrySdk.ConfigureScope(s =>
+            {
+                s.SetTag("deviceDesktop.name", name);
+                s.SetTag("deviceDesktop.vendor", vendor);
+            });
+        }
+        AppStarted?.Invoke(this, EventArgs.Empty);
+        GetService<IIpcService>().IpcProvider.StartServer();
+        GetService<IIpcService>().JsonRoutedProvider.StartServer();
+        spanLoadMainWindow.Finish();
+        transaction.Finish();
+        SentrySdk.ConfigureScope(s => s.Transaction = null);
+        GetService<IAutomationService>();
+        GetService<IRulesetService>().NotifyStatusChanged();
+        File.Delete(startupCountFilePath);
+        if (ConfigureFileHelper.Errors.FirstOrDefault(x => x.Critical) != null)
+        {
+            PlatformServices.DesktopToastService.ShowToastAsync("配置文件损坏", "ClassIsland 部分配置文件已损坏且无法加载，这些配置文件已恢复至默认值。点击此消息以查看详细信息和从过往备份中恢复配置文件。", () => GetService<IUriNavigationService>().NavigateWrapped(new Uri("classisland://app/config-errors")));
+        }
+        if (Settings.CorruptPluginsDisabledLastSession)
+        {
+            Settings.CorruptPluginsDisabledLastSession = false;
+            var content = new DesktopToastContent()
+            {
+                Title = "已自动禁用异常插件",
+                Body = "ClassIsland 已自动禁用导致上次崩溃的插件。您可以在排除问题后前往【应用设置】->【插件】中重新启用这些插件，或在【应用设置】->【基本】中调整是否自动禁用异常插件。",
+                Buttons =
+                {
+                    {
+                        "打开插件设置",
+                        () => GetService<IUriNavigationService>()
+                            .NavigateWrapped(new Uri("classisland://app/settings/classisland.plugins"))
+                    },
+                    {
+                        "管理异常插件行为",
+                        () => GetService<IUriNavigationService>()
+                            .NavigateWrapped(new Uri("classisland://app/settings/general"))
+                    }
+                }
+            };
+            content.Activated += (_, _) => GetService<IUriNavigationService>()
+                .NavigateWrapped(new Uri("classisland://app/settings/classisland.plugins"));
+            PlatformServices.DesktopToastService.ShowToastAsync(content);
+        }
+
+        if (Settings.IsSplashEnabled)
+        {
+            App.GetService<ISplashService>().EndSplash();
+        }
+        if (IAppHost.TryGetService<IManagementService>() is IManagementService { IsManagementEnabled: true, Connection: ManagementServerConnection connection })
+        {
+            connection.LogAuditEvent(AuditEvents.AppStarted, new Empty());
+        }
+        _isStartedCompleted = true;
+        AppBase.CurrentLifetime = ClassIsland.Core.Enums.ApplicationLifetime.Running;
+        if (ApplicationCommand.ImportComplete)
+        {
+            var dtWindow = new DataTransferWindow()
+            {
+                ImportName = "ClassIsland"
+            };
+            dtWindow.Show();
+            dtWindow.ImportComplete(ApplicationCommand.ImportV1Complete);
+        }
     }
 
     private void CreatePhonyRootWindow()
     {
-        PhonyRootWindow = new Window()
+        var prw = new Window()
         {
             Width = 1,
             Height = 1,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ShowActivated = false,
-            SystemDecorations = SystemDecorations.None,
+            WindowDecorations = WindowDecorations.None,
             ShowInTaskbar = false,
             Background = Brushes.Transparent,
             TransparencyLevelHint = [ WindowTransparencyLevel.Transparent ],
             Title = "PhonyRootWindow"
         };
-        PhonyRootWindow.Closing += (sender, args) =>
+        PhonyRootWindow = prw;
+        prw.Closing += (sender, args) =>
         {
             if (args.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)
             {
@@ -988,7 +1114,7 @@ public partial class App : AppBase, IAppHost
             }
             args.Cancel = true;
         };
-        PhonyRootWindow.Show();
+        prw.Show();
     }
 
 
@@ -1036,7 +1162,7 @@ public partial class App : AppBase, IAppHost
 
     private async Task ProcessInstanceExisted()
     {
-        var dialog = new TaskDialog()
+        var dialog = new FATaskDialog()
         {
             Title = "ClassIsland 已在运行",
             Content = "ClassIsland 已经启动，请通过任务栏托盘图标进行设置等操作。" +Environment.NewLine+Environment.NewLine+
@@ -1044,11 +1170,11 @@ public partial class App : AppBase, IAppHost
             XamlRoot = GetRootWindow(),
             Buttons =
             [
-                new TaskDialogButton("取消", false)
+                new FATaskDialogButton("取消", false)
             ],
             Commands =
             [
-                new TaskDialogCommand()
+                new FATaskDialogCommand()
                 {
                     DialogResult = true,
                     ClosesOnInvoked = true,
@@ -1102,32 +1228,43 @@ public partial class App : AppBase, IAppHost
         }
         _ = Dispatcher.UIThread.InvokeAsync(() =>
         {
-            var partial = CurrentLifetime < Core.Enums.ApplicationLifetime.StartingOnline;
+            // 档案加载失败时，主服务尚未初始化，退出时不能为执行清理而创建它们。
+            var partial = CurrentLifetime < Core.Enums.ApplicationLifetime.StartingOnline || _isProfileLoadFailed;
             CurrentLifetime = ClassIsland.Core.Enums.ApplicationLifetime.Stopping;
             Logger?.LogInformation("正在停止应用");
-            if (IAppHost.TryGetService<IManagementService>() is { IsManagementEnabled: true, Connection: ManagementServerConnection connection })
+            try
             {
-                connection.LogAuditEvent(AuditEvents.AppExited, new Empty());
+                if (IAppHost.TryGetService<IManagementService>() is { IsManagementEnabled: true, Connection: ManagementServerConnection connection })
+                {
+                    connection.LogAuditEvent(AuditEvents.AppExited, new Empty());
+                }
+                AppStopping?.Invoke(this, EventArgs.Empty);
+                if (!partial)
+                {
+                    IAppHost.Host?.Services.GetService<ILessonsService>()?.StopMainTimer();
+                    IAppHost.Host?.StopAsync(TimeSpan.FromSeconds(5));
+                    IAppHost.Host?.Services.GetService<SettingsService>()?.SaveSettings("停止当前应用程序。");
+                    IAppHost.Host?.Services.GetService<IAutomationService>()?.SaveConfig("停止当前应用程序。");
+                    IAppHost.Host?.Services.GetService<IProfileService>()?.SaveProfile();
+                    IAppHost.Host?.Services.GetService<IComponentsService>()?.SaveConfig();
+                }
+                if (PlatformServices.WindowPlatformService is IDisposable d)
+                {
+                    d.Dispose();
+                }
+                if (PlatformServices.DesktopToastService is IDisposable toastService)
+                {
+                    toastService.Dispose();
+                }
             }
-            AppStopping?.Invoke(this, EventArgs.Empty);
-            if (!partial)
+            catch (Exception exception)
             {
-                IAppHost.Host?.Services.GetService<ILessonsService>()?.StopMainTimer();
-                IAppHost.Host?.StopAsync(TimeSpan.FromSeconds(5));
-                IAppHost.Host?.Services.GetService<SettingsService>()?.SaveSettings("停止当前应用程序。");
-                IAppHost.Host?.Services.GetService<IAutomationService>()?.SaveConfig("停止当前应用程序。");
-                IAppHost.Host?.Services.GetService<IProfileService>()?.SaveProfile();
-                IAppHost.Host?.Services.GetService<IComponentsService>()?.SaveConfig();
+                Logger?.LogError(exception, "停止应用时清理失败");
             }
-            if (PlatformServices.WindowPlatformService is IDisposable d)
+            finally
             {
-                d.Dispose();
+                PlatformServices.AppLifetimeService.Shutdown();
             }
-            if (PlatformServices.DesktopToastService is IDisposable toastService)
-            {
-                toastService.Dispose();
-            }
-            DesktopLifetime?.Shutdown();
             try
             {
                 //ReleaseLock();
@@ -1164,17 +1301,8 @@ public partial class App : AppBase, IAppHost
     
     public override void Restart(string[] parameters, bool restartToLauncher)
     {
+        PlatformServices.AppLifetimeService.Restart(parameters, restartToLauncher);
         Stop();
-        var path = Environment.ProcessPath;
-        if (path == null)
-            return;
-        var replaced = path.Replace(".dll", PlatformExecutableExtension);
-        var startInfo = new ProcessStartInfo(restartToLauncher ? ExecutingEntrance : replaced);
-        foreach (var i in parameters)
-        {
-            startInfo.ArgumentList.Add(i);
-        }
-        Process.Start(startInfo);
     }
 
     private void NativeMenuItemOpenAbout_OnClick(object? sender, EventArgs e)

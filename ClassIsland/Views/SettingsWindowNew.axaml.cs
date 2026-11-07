@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Controls;
+using ClassIsland.Core.Extensions.UI;
+using ClassIsland.Core.Extensions;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Abstractions.Services.Management;
 using ClassIsland.Core.Attributes;
@@ -51,23 +53,20 @@ using Markdown.Avalonia.Full;
 using ReactiveUI;
 using WindowsShortcutFactory;
 using Control = Avalonia.Controls.Control;
-using SaveFileDialog = Avalonia.Controls.SaveFileDialog;
-using TaskDialog = FluentAvalonia.UI.Controls.TaskDialog;
-using TaskDialogButton = FluentAvalonia.UI.Controls.TaskDialogButton;
+using FATaskDialog = FluentAvalonia.UI.Controls.FATaskDialog;
+using FATaskDialogButton = FluentAvalonia.UI.Controls.FATaskDialogButton;
 
 namespace ClassIsland.Views;
 
 /// <summary>
 /// SettingsWindowNew.xaml 的交互逻辑
 /// </summary>
-public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
+public partial class SettingsWindowNew : ViewBase, IFANavigationPageFactory
 {
     private const string KeepHistoryParameterName = "ci_keepHistory";
     private const string ErrorPageId = "_error";
 
     public SettingsNewViewModel ViewModel { get; } = new();
-
-    private bool IsOpened { get; set; } = false;
 
     public IManagementService ManagementService { get; }
 
@@ -89,6 +88,8 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     private bool _isFirstNavigated = false;
 
     private readonly Dictionary<string, SettingsPageBase?> _cachedPages = new();
+    private IDisposable? _debugOptionsSubscription;
+    private bool _resourcesReleased;
     
     public static readonly FuncValueConverter<object?, double> ControlToWidthConverter = new(x =>
     {
@@ -115,10 +116,10 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         SettingsService = settingsService;
         SettingsService.Settings.PropertyChanged += SettingsOnPropertyChanged;
         InitializeComponent();
+        FaFrameLifetimeHelper.Attach(NavigationFrame);
         // SplashScreen = new EmptySplashScreen();
-
-        TitleBar.ExtendsContentIntoTitleBar = true;
-        TitleBar.TitleBarHitTestType = TitleBarHitTestType.Complex;
+        
+        // TitleBar.TitleBarHitTestType = FATitleBarHitTestType.Complex;
         NavigationFrame.NavigationPageFactory = this;
         ViewModel.PropertyChanged += ViewModelOnPropertyChanged;
 
@@ -128,22 +129,18 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         }
 
         BuildNavigationMenuItems();
-        SettingsService.Settings
+        _debugOptionsSubscription = SettingsService.Settings
             .ObservableForProperty(x => x.IsDebugOptionsEnabled)
             .Subscribe(_ => BuildNavigationMenuItems());
-
-        TitleBar.Height = 48;
-        if (OperatingSystem.IsMacOS())
-        {
-            ExtendClientAreaToDecorationsHint = true;
-            ExtendClientAreaChromeHints = ExtendClientAreaChromeHints.PreferSystemChrome;
-            ExtendClientAreaTitleBarHeightHint = -1;
-            SystemDecorations = SystemDecorations.Full;
-        }
     }
 
     private void BuildNavigationMenuItems()
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         NavigationView.MenuItems.Clear();
         ViewModel.FlattenNavigationItemsCache.Clear();
 
@@ -172,12 +169,12 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                     continue;
                 }
 
-                NavigationViewItem item;
+                FANavigationViewItem item;
 
                 if (i.GroupId != null && SettingsWindowRegistryService.Groups.TryGetValue(i.GroupId, out var group))
                 {
                     
-                    item = new NavigationViewItem()
+                    item = new FANavigationViewItem()
                     {
                         IconSource = group.IconSource,
                         Content = group.Name,
@@ -187,11 +184,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
                     if (groups.FirstOrDefault(x => x.Key == i.GroupId) is {} groupItems)
                     {
-                        List<NavigationViewItem> children =
+                        List<FANavigationViewItem> children =
                         [
-                            ..groupItems.Select(x => new NavigationViewItem()
+                            ..groupItems.Select(x => new FANavigationViewItem()
                             {
-                                IconSource = new FluentIconSource(x.UnSelectedIconGlyph),
+                                IconSource = x.UnSelectedIconSource,
                                 Content = x.Name,
                                 Tag = x
                             })
@@ -204,9 +201,9 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                 }
                 else
                 {
-                    item = new NavigationViewItem()
+                    item = new FANavigationViewItem()
                     {
-                        IconSource = new FluentIconSource(i.UnSelectedIconGlyph),
+                        IconSource = i.UnSelectedIconSource,
                         Content = i.Name,
                         Tag = i
                     };
@@ -222,12 +219,17 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                 continue;
             }
             
-            NavigationView.MenuItems.Add(new NavigationViewItemSeparator());
+            NavigationView.MenuItems.Add(new FANavigationViewItemSeparator());
         }
     }
 
     private async void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         if (e.PropertyName != nameof(ViewModel.SelectedPageInfo)) return;
         if (!IsLoaded || !ViewModel.IsRendered)
             return;
@@ -239,33 +241,51 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         
     }
 
-    protected override async void OnOpened(EventArgs e)
+    protected async override void OnLoaded(RoutedEventArgs e)
     {
-        base.OnOpened(e);
-        if (_isFirstNavigated)
+        base.OnLoaded(e);
+        if (_resourcesReleased || _isFirstNavigated)
         {
             return;
         }
         var page = SettingsWindowRegistryService.Registered.FirstOrDefault(x => x.Id == LaunchSettingsPage);
         ViewModel.IsRendered = true;
         await CoreNavigate(page);
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         ViewModel.IsCoverVisible = false;
         _isFirstNavigated = true;
         // await CoreNavigate(ViewModel.SelectedPageInfo);
     }
 
-    private async void NavigationServiceOnNavigating(object sender, NavigatingCancelEventArgs e)
+    private async void NavigationServiceOnNavigating(object sender, FANavigatingCancelEventArgs e)
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         ViewModel.IsNavigating = true;
     }
 
     private async Task UpdateEchoCaveAsync()
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         if (ViewModel.EchoCaveTextsAll.Count <= 0)
         {
-            var stream = AssetLoader.Open(new Uri("avares://ClassIsland/Assets/Tellings.txt"));
+            var sayings = await AssetLoader.ReadAllTextAsync(new Uri("avares://ClassIsland/Assets/Tellings.txt"));
+            if (_resourcesReleased)
+            {
+                return;
+            }
 
-            var sayings = await new StreamReader(stream).ReadToEndAsync();
             ViewModel.EchoCaveTextsAll = [..sayings.Split(Environment.NewLine)];
         }
         if (ViewModel.EchoCaveTexts.Count <= 0)
@@ -287,8 +307,13 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         }
     }
 
-    private async void NavigationServiceOnLoadCompleted(object sender, NavigationEventArgs e)
+    private async void NavigationServiceOnLoadCompleted(object sender, FANavigationEventArgs e)
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         if (e.Parameter is SettingsWindowNavigationData { IsNavigateFromSettingsWindow: true } data)
         {
             var transaction = data.Transaction as ITransactionTracer;
@@ -312,7 +337,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                 transaction?.Finish(SpanStatus.InternalError);
             }
         }
-        else if (e.NavigationMode == NavigationMode.Back)
+        else if (e.NavigationMode == FANavigationMode.Back)
         {
             // 对于通过其它方式导航的设置页面，需要手动设置选中的导航菜单项
             var info = e.Content is SettingsPageBase spb
@@ -336,15 +361,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     private async Task CoreNavigate(SettingsPageInfo? info, Uri? uri = null)
     {
         Logger.LogTrace("pre-开始导航");
-        if (info == null || Equals(info, ViewModel.SelectedPageInfo))
+        if (_resourcesReleased || info == null || Equals(info, ViewModel.SelectedPageInfo))
         {
             return;
         }
 
-        var transaction = SentrySdk.StartTransaction("Navigate SettingsPage", "settings.navigate");
-        transaction.SetTag("navigationPage", info.Name);
-        transaction.SetTag("navigationPage.id", info.Id);
-        var spanLoadPhase1 = transaction.StartChild("setupPage");
         switch (info.Category)
         {
             // 判断是否可以导航
@@ -359,6 +380,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         {
             return;
         }
+
+        var transaction = SentrySdk.StartTransaction("Navigate SettingsPage", "settings.navigate");
+        transaction.SetTag("navigationPage", info.Name);
+        transaction.SetTag("navigationPage.id", info.Id);
+        var spanLoadPhase1 = transaction.StartChild("setupPage");
         Logger.LogTrace("开始导航");
         ViewModel.FrameContent = null;
         ViewModel.IsPopupOpen = false;
@@ -374,6 +400,13 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             if (SettingsService.Settings.ShowEchoCaveWhenSettingsPageLoading)
             {
                 await UpdateEchoCaveAsync();
+            }
+
+            if (_resourcesReleased)
+            {
+                spanLoadPhase1.Finish();
+                transaction.Finish();
+                return;
             }
             
             HangService.AssumeHang();
@@ -400,6 +433,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             Logger.LogError(ex, "无法完成设置页面导航 {}", info.Id);
             spanLoadPhase1.Finish(ex, SpanStatus.InternalError);
             transaction.Finish(SpanStatus.InternalError);
+            if (_resourcesReleased)
+            {
+                return;
+            }
+
             ViewModel.IsNavigating = false;
             if (info.Id != ErrorPageId)
             {
@@ -416,6 +454,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     private SettingsPageBase? GetPage(string? id, out bool cached)
     {
         cached = false;
+        if (_resourcesReleased)
+        {
+            return null;
+        }
+
         if (_cachedPages.TryGetValue(id ?? "", out var page))
         {
             cached = true;
@@ -436,9 +479,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
     private void SettingsWindowNew_OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        ViewModel.IsViewCompressed = Width < 800;
-        if (WindowState == WindowState.Maximized)
-            ViewModel.IsViewCompressed = false;
+        ViewModel.IsViewCompressed = Bounds.Width < 800;
         if (!ViewModel.IsViewCompressed)
         {
             ViewModel.IsNavigationDrawerOpened = true;
@@ -455,40 +496,52 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         NavigationFrame.GoBack();
     }
 
-    public async void Open()
+    public override async void Open(ViewBase? owner = null)
     {
-        if (!IsOpened)
+        if (_resourcesReleased)
         {
-            if (!await ManagementService.AuthorizeByLevel(ManagementService.CredentialConfig.EditSettingsAuthorizeLevel))
-            {
-                return;
-            }
-            SentrySdk.Metrics.EmitCounter("views.SettingsWindow.open", 1);
-            IsOpened = true;
-            Show();
+            return;
         }
-        else
-        {
-            if (WindowState == WindowState.Minimized)
-            {
-                WindowState = WindowState.Normal;
-            }
 
-            Activate();
+        if (!await ManagementService.AuthorizeByLevel(ManagementService.CredentialConfig.EditSettingsAuthorizeLevel))
+        {
+            return;
         }
-        TutorialService.PushToNextSentence("classisland.getStarted.welcome/systems");
+
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
+        TutorialService.PushToNextSentenceByTag("classisland.settingsWindow.open");
+        base.Open(owner);
     }
 
     public async void Open(string key, Uri? uri = null)
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         var page = SettingsWindowRegistryService.Registered.FirstOrDefault(x => x.Id == key) ?? ViewModel.SelectedPageInfo;
         LaunchSettingsPage = key;
         await CoreNavigate(page, uri);
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         Open();
     }
 
     public void OpenUri(Uri uri)
     {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
         if (uri.Segments.Length > 2)
         {
             var uriSegment = uri.Segments[2].EndsWith('/') ? uri.Segments[2][..^1] : uri.Segments[2];
@@ -496,25 +549,6 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         }
         else if (uri.Segments.Length == 2)
             Open();
-    }
-
-    private void SettingsWindowNew_OnClosing(object? sender, WindowClosingEventArgs e)
-    {
-        if (e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)
-        {
-            return;
-        }
-        e.Cancel = true;
-        IsOpened = false;
-        Hide();
-        SettingsService.SaveSettings("关闭应用设置窗口");
-        ComponentsService.SaveConfig();
-        App.GetService<IAutomationService>().SaveConfig("关闭应用设置窗口");
-        if (SettingsService.Settings.SettingsPagesCachePolicy <= 1)
-        {
-            _cachedPages.Clear();
-        }
-        GC.Collect();
     }
 
     private void CommandBindingOpenDrawer_OnExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -538,16 +572,16 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         if (!IsShowingRestartDialog)
         {
             IsShowingRestartDialog = true;
-            var r = await new ContentDialog()
+            var r = await new FAContentDialog()
             {
                 Title = "需要重启",
                 Content = "部分设置需要重启以应用更改。",
                 PrimaryButtonText = "重启",
                 CloseButtonText = "取消",
-                DefaultButton = ContentDialogButton.Primary,
-            }.ShowAsync(this);
+                DefaultButton = FAContentDialogButton.Primary,
+            }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
             IsShowingRestartDialog = false;
-            if (r != ContentDialogResult.Primary)
+            if (r != FAContentDialogResult.Primary)
                 return;
             AppBase.Current.Restart();
         }
@@ -604,15 +638,15 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         };
         try
         {
-            var r = await new TaskDialog()
+            var r = await new FATaskDialog()
             {
                 Header = "导出诊断信息",
                 Content = "您正在导出应用的诊断数据。导出的诊断数据将包含应用 30 天内产生的日志、系统及环境信息、应用设置、当前加载的档案、所使用的插件（如有）和集控设置（如有），可能包含敏感信息，请在导出后注意检查。",
                 XamlRoot = this,
                 Buttons =
                 {
-                    new TaskDialogButton("取消", false),
-                    new TaskDialogButton("继续", true)
+                    new FATaskDialogButton("取消", false),
+                    new FATaskDialogButton("继续", true)
                     {
                         IsDefault = true
                     }
@@ -628,7 +662,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             {
                 Title = "导出诊断数据",
                 SuggestedStartLocation =
-                    await StorageProvider.TryGetFolderFromPathAsync(
+                    await TopLevel.GetTopLevel(this)!.StorageProvider.TryGetFolderFromPathAsync(
                         Environment.GetFolderPath(Environment.SpecialFolder.Desktop)),
                 FileTypeChoices =
                 [
@@ -637,14 +671,23 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                         Patterns = ["*.zip"]
                     }
                 ]
-            }, this);
+            }, TopLevel.GetTopLevel(this)!);
             PopupHelper.RestoreAllPopups();
             if (file == null)
             {
                 return;
             }
 
-            await DiagnosticService.ExportDiagnosticData(file);
+            var topLevel = TopLevel.GetTopLevel(this)!;
+            using var storageFile = await PlatformServices.FilePickerService.GetFileAsync(file, topLevel)
+                                    ?? throw new FileNotFoundException("无法打开所选诊断数据文件。", file);
+            await using var outputStream = await storageFile.OpenWriteAsync();
+            if (outputStream.CanSeek)
+            {
+                outputStream.SetLength(0);
+                outputStream.Position = 0;
+            }
+            await DiagnosticService.ExportDiagnosticData(outputStream);
             this.ShowSuccessToast($"已导出诊断信息到 {file}。");
         }
         catch (Exception exception)
@@ -659,20 +702,12 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
     private void MenuItemOpenLogFolder_OnClick(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = Path.GetFullPath(CommonDirectories.AppLogFolderPath) ?? "",
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(CommonDirectories.AppLogFolderPath);
     }
 
     private void MenuItemOpenAppFolder_OnClick(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = Path.GetFullPath(".") ?? "",
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(".");
     }
 
     private void MenuItemDebugWindowRule_OnClick(object sender, RoutedEventArgs e)
@@ -682,11 +717,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
     private void MenuItemOpenDataFolder_OnClick(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo()
-        {
-            FileName = Path.GetFullPath(CommonDirectories.AppRootFolderPath) ?? "",
-            UseShellExecute = true
-        });
+        PlatformServices.LauncherService.LaunchPath(CommonDirectories.AppRootFolderPath);
     }
 
     private async void MenuItemAddDesktopShortcut_OnClick(object? sender, RoutedEventArgs e)
@@ -719,15 +750,15 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     {
         if (!PlatformServices.DesktopService.IsUrlSchemeRegistered)
         {
-            var urlDialogResult = await new TaskDialog()
+            var urlDialogResult = await new FATaskDialog()
             {
                 Header = "创建快捷换课快捷方式",
                 Content = "快捷换课快捷方式需要启用【注册 Url 协议】选项才能工作。您要启用它吗？",
                 XamlRoot = this,
                 Buttons =
                 {
-                    new TaskDialogButton("取消", false),
-                    new TaskDialogButton("启用", true)
+                    new FATaskDialogButton("取消", false),
+                    new FATaskDialogButton("启用", true)
                     {
                         IsDefault = true
                     }
@@ -745,7 +776,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         {
             SuggestedFileName = "快捷换课.url",
             SuggestedStartLocation =
-                await StorageProvider.TryGetFolderFromPathAsync(
+                await TopLevel.GetTopLevel(this)!.StorageProvider.TryGetFolderFromPathAsync(
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop)),
             FileTypeChoices = [
                 new FilePickerFileType("快捷方式")
@@ -753,7 +784,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
                     Patterns = ["*.url"]
                 }
             ]
-        }, this);
+        }, TopLevel.GetTopLevel(this)!);
         PopupHelper.RestoreAllPopups();
         if (file == null)
         {
@@ -762,7 +793,16 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
         try
         {
-            await ShortcutHelpers.CreateClassSwapShortcutAsync(file);
+            var topLevel = TopLevel.GetTopLevel(this)!;
+            using var storageFile = await PlatformServices.FilePickerService.GetFileAsync(file, topLevel)
+                                    ?? throw new FileNotFoundException("无法打开所选快捷方式文件。", file);
+            await using var outputStream = await storageFile.OpenWriteAsync();
+            if (outputStream.CanSeek)
+            {
+                outputStream.SetLength(0);
+                outputStream.Position = 0;
+            }
+            await ShortcutHelpers.CreateClassSwapShortcutAsync(outputStream);
             this.ShowSuccessToast($"已创建快捷换课图标到 {file}。");
         }
         catch (Exception exception)
@@ -783,12 +823,17 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
 
     public Control? GetPage(Type srcType)
     {
+        if (_resourcesReleased)
+        {
+            return null;
+        }
+
         return Activator.CreateInstance(srcType) as Control;
     }
 
     public Control? GetPageFromObject(object target)
     {
-        if (target is not SettingsWindowNavigationData data)
+        if (_resourcesReleased || target is not SettingsWindowNavigationData data)
         {
             return null;
         }
@@ -807,15 +852,15 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         return page;
     }
 
-    private async void NavigationView_OnItemInvoked(object? sender, NavigationViewItemInvokedEventArgs e)
+    private async void NavigationView_OnItemInvoked(object? sender, FANavigationViewItemInvokedEventArgs e)
     {
-        if (e.InvokedItemContainer is NavigationViewItem navItem && navItem.Tag is SettingsPageInfo info)
+        if (e.InvokedItemContainer is FANavigationViewItem navItem && navItem.Tag is SettingsPageInfo info)
         {
             await CoreNavigate(info);
         }
     }
 
-    private void NavigationView_OnBackRequested(object? sender, NavigationViewBackRequestedEventArgs e)
+    private void NavigationView_OnBackRequested(object? sender, FANavigationViewBackRequestedEventArgs e)
     {
         NavigationFrame.GoBack();
     }
@@ -825,9 +870,9 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         NavigationView.IsPaneOpen = !NavigationView.IsPaneOpen;
     }
 
-    private void MenuItemDataTransfer_OnClick(object? sender, RoutedEventArgs e)
+    private async void MenuItemDataTransfer_OnClick(object? sender, RoutedEventArgs e)
     {
-        IAppHost.GetService<DataTransferWindow>().ShowDialog(this);
+        await IAppHost.GetService<DataTransferWindow>().ShowModal(this);
     }
 
     private void MenuItemOpenManagementSettingsPage_OnClick(object? sender, RoutedEventArgs e)
@@ -854,7 +899,7 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
         {
             NavigationView.SelectedItem = item;
         } else if (NavigationView.MenuItems
-                   .OfType<NavigationViewItem>()
+                   .OfType<FANavigationViewItem>()
                    .FirstOrDefault(x => x.MenuItems.Contains(item))
                    is {} parent)
         {
@@ -862,6 +907,11 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
             var isFirstNavigated = _isFirstNavigated;
             Dispatcher.UIThread.Post(() =>
             {
+                if (_resourcesReleased)
+                {
+                    return;
+                }
+
                 if (!isFirstNavigated)
                 {
                     parent.IsExpanded = true;
@@ -879,5 +929,63 @@ public partial class SettingsWindowNew : MyWindow, INavigationPageFactory
     private void Control_OnLoaded(object? sender, RoutedEventArgs e)
     {   
         
+    }
+
+    private void ViewBase_OnClosed(object? sender, RoutedEventArgs e)
+    {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
+        try
+        {
+            SettingsService.SaveSettings("关闭应用设置窗口");
+            ComponentsService.SaveConfig();
+            App.GetService<IAutomationService>().SaveConfig("关闭应用设置窗口");
+        }
+        finally
+        {
+            ReleaseResources();
+            GC.Collect();
+        }
+    }
+
+    private void ReleaseResources()
+    {
+        if (_resourcesReleased)
+        {
+            return;
+        }
+
+        _resourcesReleased = true;
+
+        SettingsService.Settings.PropertyChanged -= SettingsOnPropertyChanged;
+        _debugOptionsSubscription?.Dispose();
+        _debugOptionsSubscription = null;
+        ViewModel.PropertyChanged -= ViewModelOnPropertyChanged;
+        Closed -= ViewBase_OnClosed;
+
+        NavigationFrame.Navigated -= NavigationServiceOnLoadCompleted;
+        NavigationFrame.Navigating -= NavigationServiceOnNavigating;
+        NavigationFrame.NavigationPageFactory = null;
+        NavigationFrame.IsNavigationStackEnabled = false;
+        NavigationFrame.Content = null;
+        NavigationView.SelectedItem = null;
+        NavigationView.MenuItems.Clear();
+
+        ViewModel.FrameContent = null;
+        ViewModel.SelectedPageInfo = null;
+        ViewModel.DrawerContent = null;
+        ViewModel.IsDrawerOpen = false;
+        ViewModel.IsNavigating = false;
+        ViewModel.IsRendered = false;
+        ViewModel.FlattenNavigationItemsCache.Clear();
+        ViewModel.NavigationViewItems.Clear();
+        _cachedPages.Clear();
+
+        DataContext = null;
+        Content = null;
+        Resources.Clear();
     }
 }

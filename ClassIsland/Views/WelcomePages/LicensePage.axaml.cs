@@ -6,6 +6,8 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using ClassIsland.Core.Controls;
+using ClassIsland.Core.Extensions;
+using ClassIsland.Core.Extensions.UI;
 using FluentAvalonia.UI.Controls;
 
 namespace ClassIsland.Views.WelcomePages;
@@ -19,9 +21,8 @@ public partial class LicensePage : UserControl
 
     private async void ButtonShowOssLicense_OnClick(object? sender, RoutedEventArgs e)
     {
-        var license = await new StreamReader(AssetLoader.Open(new Uri("avares://ClassIsland/Assets/LICENSE.txt")))
-            .ReadToEndAsync();
-        await new ContentDialog()
+        var license = await AssetLoader.ReadAllTextAsync(new Uri("avares://ClassIsland/Assets/LICENSE.txt"));
+        await new FAContentDialog()
         {
             Title = "开放源代码许可",
             Content = new TextBlock()
@@ -29,8 +30,8 @@ public partial class LicensePage : UserControl
                 Text = license
             },
             PrimaryButtonText = "关闭",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync();
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto();
     }
 
     private void ButtonShowPrivacyLicense_OnClick(object? sender, RoutedEventArgs e)

@@ -10,7 +10,9 @@ using Avalonia.Interactivity;
 using Avalonia.Labs.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using ClassIsland.Core.Extensions.UI;
 using ClassIsland.Core;
+using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Controls;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Models.UI;
@@ -25,7 +27,7 @@ using WindowsShortcutFactory;
 
 namespace ClassIsland.Views;
 
-public partial class WelcomeWindow : MyWindow, INavigationPageFactory
+public partial class WelcomeWindow : ViewBase, IFANavigationPageFactory
 {
    
     public static readonly ICommand WelcomeNavigateBackCommand = new RoutedCommand(nameof(WelcomeNavigateBackCommand));
@@ -48,14 +50,8 @@ public partial class WelcomeWindow : MyWindow, INavigationPageFactory
     public WelcomeWindow()
     {
         InitializeComponent();
+        FaFrameLifetimeHelper.Attach(MainFrame);
         DataContext = this;
-        if (OperatingSystem.IsMacOS())
-        {
-            ExtendClientAreaToDecorationsHint = true;
-            ExtendClientAreaChromeHints = ExtendClientAreaChromeHints.PreferSystemChrome;
-            ExtendClientAreaTitleBarHeightHint = -1;
-            SystemDecorations = SystemDecorations.Full;
-        }
         SetWelcomeExperience(false, true, false);
     }
 
@@ -214,31 +210,31 @@ public partial class WelcomeWindow : MyWindow, INavigationPageFactory
             ViewModel.SettingsService.Settings.LeftRefreshingToastCounts = 0;
         }
         
-        Close();
+        Hide();
     }
 
-    private async void Window_OnClosing(object? sender, WindowClosingEventArgs e)
+    private async void Window_OnClosing(object? sender, ViewClosingEventArgs e)
     {
-        if (ViewModel.CanClose || e.CloseReason is WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown || !IsOnboarding)
+        if (ViewModel.CanClose || !IsOnboarding)
         {
             return;
         }
 
         e.Cancel = true;
-        var r = await new ContentDialog()
+        var r = await new FAContentDialog()
         {
             Title = "退出 ClassIsland",
             Content = "您需要完成设置才能开始使用本应用。关闭此窗口将直接退出应用。",
             PrimaryButtonText = "退出",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync(this);
-        if (r != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (r != FAContentDialogResult.Primary)
         {
             return;
         }
 
         ViewModel.CanClose = true;
-        Close();
+        Hide();
     }
 }

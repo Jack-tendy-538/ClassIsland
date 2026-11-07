@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -10,11 +11,13 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ClassIsland.Core;
+using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Controls;
 using ClassIsland.Core.Enums.Tutorial;
 using ClassIsland.Core.Helpers.UI;
 using ClassIsland.Core.Models.Tutorial;
+using ClassIsland.Core.Models.UI;
 using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Shared;
 using ClassIsland.Shared.Helpers;
@@ -26,15 +29,17 @@ using Mono.Unix;
 
 namespace ClassIsland.Views;
 
-public partial class TutorialEditorWindow : MyWindow
+public partial class TutorialEditorWindow : ViewBase
 {
     public static FuncValueConverter<TutorialActionKind, int> TutorialActionKindToIntConverter { get; } =
         new(x => (int)x, x => (TutorialActionKind)x);
     
-    public static FuncValueConverter<TeachingTipPlacementMode, int> TeachingTipPlacementModeToIntConverter { get; } =
-        new(x => (int)x, x => (TeachingTipPlacementMode)x);
+    public static FuncValueConverter<FATeachingTipPlacementMode, int> TeachingTipPlacementModeToIntConverter { get; } =
+        new(x => (int)x, x => (FATeachingTipPlacementMode)x);
     
     public TutorialEditorViewModel ViewModel { get; } = IAppHost.GetService<TutorialEditorViewModel>();
+
+    private Window? _hostWindow;
     
     public TutorialEditorWindow()
     {
@@ -129,7 +134,7 @@ public partial class TutorialEditorWindow : MyWindow
             ViewModel.CurrentParagraph?.Content.Remove(ViewModel.CurrentSentence);
     }
 
-    private void ButtonEditSentenceScript_OnClick(object? sender, RoutedEventArgs e)
+    private async void ButtonEditSentenceScript_OnClick(object? sender, RoutedEventArgs e)
     {
         if (ViewModel.CurrentSentence == null)
         {
@@ -140,7 +145,7 @@ public partial class TutorialEditorWindow : MyWindow
         {
             TutorialSentence = ViewModel.CurrentSentence
         };
-        _ = window.ShowDialog(this);
+        await window.ShowModal(this);
     }
     
     private void DataGridParagraphContent_OnGotFocus(object? sender, RoutedEventArgs e)
@@ -171,23 +176,34 @@ public partial class TutorialEditorWindow : MyWindow
         {
             FileTypeFilter = [FilePickerFileTypes.Json],
             AllowMultiple = false
-        }, this);
+        }, TopLevel!);
         if (paths.Count <= 0)
         {
             return;
         }
 
-        var path = ViewModel.OpenedFilePath = paths[0];
-        ViewModel.CurrentTutorialGroup = ConfigureFileHelper.LoadConfig<TutorialGroup>(path, false);
-        this.ShowToast($"已打开 {path}");
-        var id = ViewModel.CurrentTutorialGroup.Id;
-        if (ITutorialService.RegisteredTutorialGroups.FirstOrDefault(x => x.Id == id) is not {} existed)
+        var path = paths[0];
+        try
         {
-            return;
+            using var file = await PlatformServices.FilePickerService.GetFileAsync(path, TopLevel!)
+                             ?? throw new FileNotFoundException("无法打开所选教程文件。", path);
+            await using var stream = await file.OpenReadAsync();
+            ViewModel.CurrentTutorialGroup = ConfigureFileHelper.LoadConfigUnWrapped<TutorialGroup>(stream);
+            ViewModel.OpenedFilePath = path;
+            this.ShowToast($"已打开 {path}");
+            var id = ViewModel.CurrentTutorialGroup.Id;
+            if (ITutorialService.RegisteredTutorialGroups.FirstOrDefault(x => x.Id == id) is not {} existed)
+            {
+                return;
+            }
+            ViewModel.TutorialService.StopTutorial();
+            ITutorialService.RegisteredTutorialGroups.Replace(existed, ViewModel.CurrentTutorialGroup);
+            this.ShowToast($"已替换 ID 为 {id} 的教程组并启用热重载。");
         }
-        ViewModel.TutorialService.StopTutorial();
-        ITutorialService.RegisteredTutorialGroups.Replace(existed, ViewModel.CurrentTutorialGroup);
-        this.ShowToast($"已替换 ID 为 {id} 的教程组并启用热重载。");
+        catch (Exception exception)
+        {
+            this.ShowErrorToast("无法打开教程文件", exception);
+        }
     }
 
     private async void MenuItemSave_OnClick(object? sender, RoutedEventArgs e)
@@ -202,7 +218,7 @@ public partial class TutorialEditorWindow : MyWindow
             var paths = await PlatformServices.FilePickerService.SaveFilePickerAsync(new FilePickerSaveOptions()
             {
                 FileTypeChoices = [FilePickerFileTypes.Json],
-            }, this);
+            }, TopLevel!);
             if (paths == null)
             {
                 return;
@@ -211,22 +227,39 @@ public partial class TutorialEditorWindow : MyWindow
             ViewModel.OpenedFilePath = paths;
         }
 
-        SaveTutorialGroupToFile();
+        await SaveTutorialGroupToFile();
     }
 
-    private void SaveTutorialGroupToFile()
+    private async Task<bool> SaveTutorialGroupToFile()
     {
         if (string.IsNullOrWhiteSpace(ViewModel.OpenedFilePath))
         {
-            return;
+            return false;
         }
-        ConfigureFileHelper.SaveConfig(ViewModel.OpenedFilePath, ViewModel.CurrentTutorialGroup, true);
-        this.ShowToast($"已保存 {ViewModel.OpenedFilePath}");
+        try
+        {
+            using var file = await PlatformServices.FilePickerService.GetFileAsync(ViewModel.OpenedFilePath, TopLevel!)
+                             ?? throw new FileNotFoundException("无法打开所选教程文件。", ViewModel.OpenedFilePath);
+            await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
+            {
+                stream.SetLength(0);
+                stream.Position = 0;
+            }
+            ConfigureFileHelper.SaveConfig(stream, ViewModel.CurrentTutorialGroup, true);
+            this.ShowToast($"已保存 {ViewModel.OpenedFilePath}");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            this.ShowErrorToast("无法保存教程文件", exception);
+            return false;
+        }
     }
 
-    private async void TopLevel_OnClosing(object? sender, WindowClosingEventArgs e)
+    private async void TopLevel_OnClosing(object? sender, ViewClosingEventArgs e)
     {
-        if (e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown || ViewModel.IsClosing)
+        if (e.ViewHostCloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown || ViewModel.IsClosing)
         {
             return;
         }
@@ -238,19 +271,19 @@ public partial class TutorialEditorWindow : MyWindow
     {
         if (string.IsNullOrWhiteSpace(ViewModel.OpenedFilePath))
         {
-            var dialog = new TaskDialog()
+            var dialog = new FATaskDialog()
             {
                 XamlRoot = this,
                 Header = "更改尚未保存",
                 Content = "更改尚未保存，您要在退出前保存更改吗？",
                 Buttons =
                 [
-                    new TaskDialogButton("保存", 0)
+                    new FATaskDialogButton("保存", 0)
                     {
                         IsDefault = true,
                     },
-                    new TaskDialogButton("不保存", 1),
-                    new TaskDialogButton("取消", 2)
+                    new FATaskDialogButton("不保存", 1),
+                    new FATaskDialogButton("取消", 2)
                 ]
             };
             var result = await dialog.ShowAsync();
@@ -276,14 +309,43 @@ public partial class TutorialEditorWindow : MyWindow
                     break;
             }
         }
-        SaveTutorialGroupToFile();
+        if (!string.IsNullOrWhiteSpace(ViewModel.OpenedFilePath) && !await SaveTutorialGroupToFile())
+        {
+            return;
+        }
         ViewModel.IsClosing = true;
         Close();
     }
 
-    private void WindowBase_OnDeactivated(object? sender, EventArgs e)
+    private async void WindowBase_OnDeactivated(object? sender, EventArgs e)
     {
-        SaveTutorialGroupToFile();
+        await SaveTutorialGroupToFile();
+    }
+
+    protected override void OnLoaded(RoutedEventArgs e)
+    {
+        base.OnLoaded(e);
+        if (TopLevel is not Window hostWindow || ReferenceEquals(_hostWindow, hostWindow))
+        {
+            return;
+        }
+
+        if (_hostWindow != null)
+        {
+            _hostWindow.Deactivated -= WindowBase_OnDeactivated;
+        }
+        _hostWindow = hostWindow;
+        _hostWindow.Deactivated += WindowBase_OnDeactivated;
+    }
+
+    protected override void OnUnloaded(RoutedEventArgs e)
+    {
+        if (_hostWindow != null)
+        {
+            _hostWindow.Deactivated -= WindowBase_OnDeactivated;
+            _hostWindow = null;
+        }
+        base.OnUnloaded(e);
     }
 
     private async void MenuItemSaveAs_OnClick(object? sender, RoutedEventArgs e)

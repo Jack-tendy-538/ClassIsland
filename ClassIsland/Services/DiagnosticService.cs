@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Management;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Runtime.Versioning;
@@ -16,11 +15,14 @@ using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Enums;
 using ClassIsland.Core.Models.Plugin;
+using ClassIsland.Platforms.Abstraction;
 using ClassIsland.Services.Logging;
 using ClassIsland.Services.Management;
 
 using Microsoft.Extensions.Logging;
 using Sentry;
+using Sentry.Protocol;
+using OperatingSystem = System.OperatingSystem;
 
 namespace ClassIsland.Services;
 
@@ -112,6 +114,33 @@ public class DiagnosticService(SettingsService settingsService, FileFolderServic
     {
         try
         {
+            await using (var outputStream = File.Create(path))
+            {
+                await ExportDiagnosticData(outputStream);
+            }
+            if (showExportedFile && (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsAndroid()))
+            {
+                Process.Start(new ProcessStartInfo()
+                {
+                    FileName = Path.GetDirectoryName(path) ?? "",
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "无法导出诊断数据。");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 导出诊断信息到流
+    /// </summary>
+    public async Task ExportDiagnosticData(Stream outputStream)
+    {
+        try
+        {
             var temp = Directory.CreateTempSubdirectory("ClassIslandDiagnosticExport").FullName;
             var logs = string.Join(Environment.NewLine, AppLogService.Logs);
             //await File.WriteAllTextAsync(Path.Combine(temp, "Logs.log"), logs);
@@ -130,20 +159,11 @@ public class DiagnosticService(SettingsService settingsService, FileFolderServic
             FileFolderService.CopyFolder(Path.Combine(CommonDirectories.AppConfigPath), Path.Combine(temp, "Config/"));
             FileFolderService.CopyFolder(Path.Combine(CommonDirectories.AppLogFolderPath), Path.Combine(temp, "Logs/"));
 
-            File.Delete(path);
             await Task.Run(() =>
             {
-                ZipFile.CreateFromDirectory(temp, path);
+                ZipFile.CreateFromDirectory(temp, outputStream);
             });
             Directory.Delete(temp, true);
-            if (showExportedFile)
-            {
-                Process.Start(new ProcessStartInfo()
-                {
-                    FileName = Path.GetDirectoryName(path) ?? "",
-                    UseShellExecute = true
-                });
-            }
         }
         catch (Exception e)
         {
@@ -155,44 +175,11 @@ public class DiagnosticService(SettingsService settingsService, FileFolderServic
     /// <summary>
     /// 获取设备信息
     /// </summary>
-    /// <param name="name">输出设备名称</param>
+    /// <param name="name">输出设备型号</param>
     /// <param name="vendor">输出设备提供商</param>
-    /// <remarks>对于Windows平台，返回WMI中Win32_ComputerSystemProduct定义的信息<para/>
-    /// 对于Linux平台，返回/sys/devices/virtual/dmi/id/下的product_name和sys_vendor文件内容<para/>
-    /// 对于macOS平台，返回固定值"Macintosh"和"Apple Inc."<para/>
-    /// </remarks>
     public static void GetDeviceInfo(out string name, out string vendor)
     {
-        name = "???";
-        vendor = "???";
-        try
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                using var moc = new ManagementClass("Win32_ComputerSystemProduct").GetInstances();
-                foreach (var mo in moc)
-                {
-                    name = mo.GetPropertyValue("Name") as string ?? "???";
-                    vendor = mo.GetPropertyValue("Vendor") as string ?? "???";
-                }
-            }
-
-            if (OperatingSystem.IsLinux())
-            {
-                if (File.Exists("/sys/devices/virtual/dmi/id/product_name")) name = File.ReadAllText("/sys/devices/virtual/dmi/id/product_name").Trim();
-                if (File.Exists("/sys/devices/virtual/dmi/id/sys_vendor")) vendor = File.ReadAllText("/sys/devices/virtual/dmi/id/sys_vendor").Trim();
-            }
-
-            if (OperatingSystem.IsMacOS())
-            {
-                vendor = "Apple Inc.";
-                name = "Macintosh";
-            }
-        }
-        catch
-        {
-            // ignored
-        }
+        PlatformServices.DeviceInfoService.GetDeviceInfo(out name, out vendor);
     }
 
     /// <summary>

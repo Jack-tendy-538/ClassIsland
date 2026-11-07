@@ -10,11 +10,13 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Avalonia;
+using ClassIsland.Core.Extensions.UI;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using ClassIsland.Core;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Helpers.UI;
@@ -115,15 +117,15 @@ public partial class DataTransferPage : UserControl
 
     private async Task BeginPerformClassIslandImport()
     {
-        var r = await new ContentDialog()
+        var r = await new FAContentDialog()
         {
             Title = "重启以继续",
             Content = "应用需要重启以继续导入操作，要重启以继续导入吗？",
             PrimaryButtonText = "重启并继续",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync(TopLevel.GetTopLevel(this));
-        if (r != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (r != FAContentDialogResult.Primary)
         {
             return;
         }
@@ -151,7 +153,7 @@ public partial class DataTransferPage : UserControl
         {
             throw new Exception("源 ClassIsland 版本必须在 1.7.0.x，才能进行导入。");
         }
-        settings.MainWindowFont = MainWindow.DefaultFontFamilyKey;
+        settings.MainWindowFont = MainWindow.PlatformDefaultFontFamilyKey;
         settings.AutoInstallUpdateNextStartup = false;
         settings.ShowEchoCaveWhenSettingsPageLoading = false;
         if (settings.WeatherIconId == "classisland.weatherIcons.materialDesign")
@@ -293,15 +295,15 @@ public partial class DataTransferPage : UserControl
     
     private async Task BeginPerformClassIsland2Import()
     {
-        var r = await new ContentDialog()
+        var r = await new FAContentDialog()
         {
             Title = "重启以继续",
             Content = "应用需要重启以继续导入操作，要重启以继续导入吗？",
             PrimaryButtonText = "重启并继续",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync(TopLevel.GetTopLevel(this));
-        if (r != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (r != FAContentDialogResult.Primary)
         {
             return;
         }
@@ -327,6 +329,10 @@ public partial class DataTransferPage : UserControl
         try
         {
             ViewModel.PageIndex = 3;
+            var topLevel = TopLevel.GetTopLevel(this) ?? AppBase.Current.GetRootWindow();
+            using var file = await PlatformServices.FilePickerService.GetFileAsync(root, topLevel)
+                             ?? throw new FileNotFoundException("无法打开所选 ClassIsland 数据文件。", root);
+            await using var inputStream = await file.OpenReadAsync();
             await Task.Run(() =>
             {
                 var appRoot = Path.GetFullPath(CommonDirectories.AppRootFolderPath);
@@ -336,7 +342,7 @@ public partial class DataTransferPage : UserControl
                     Directory.Delete(PluginService.PluginsRootPath, true);
                 }
 
-                using var archive = ZipFile.OpenRead(root);
+                using var archive = new ZipArchive(inputStream, ZipArchiveMode.Read, true);
                 foreach (var entry in archive.Entries)
                 {
                     if (!ShouldImportEntry(entry.FullName))
@@ -456,6 +462,15 @@ public partial class DataTransferPage : UserControl
         {
             ViewModel.PageIndex = 3;
             var path = ViewModel.ImportSourcePath;
+            var topLevel = TopLevel.GetTopLevel(this) ?? AppBase.Current.GetRootWindow();
+            using var file = await PlatformServices.FilePickerService.GetFileAsync(path, topLevel)
+                             ?? throw new FileNotFoundException("无法打开所选 ClassIsland 数据文件。", path);
+            await using var outputStream = await file.OpenWriteAsync();
+            if (outputStream.CanSeek)
+            {
+                outputStream.SetLength(0);
+                outputStream.Position = 0;
+            }
             var temp = Directory.CreateTempSubdirectory("ClassIslandDataExport").FullName;
             //await File.WriteAllTextAsync(Path.Combine(temp, "Logs.log"), logs);
             Directory.CreateDirectory(Path.Combine(temp, "Profiles/"));
@@ -477,8 +492,7 @@ public partial class DataTransferPage : UserControl
                     FileFolderService.CopyFolder(Path.Combine(CommonDirectories.AppConfigPath), Path.Combine(temp, "Config/"));
                     FileFolderService.CopyFolder(Path.Combine(PluginService.PluginsRootPath), Path.Combine(temp, "Plugins/"));
                 }
-                File.Delete(path);
-                ZipFile.CreateFromDirectory(temp, path);
+                ZipFile.CreateFromDirectory(temp, outputStream);
             });
             Directory.Delete(temp, true);
             ViewModel.PageIndex = 4;
@@ -721,15 +735,15 @@ public partial class DataTransferPage : UserControl
         {
             return;
         }
-        var r = await new ContentDialog()
+        var r = await new FAContentDialog()
         {
             Title = "重启以继续",
             Content = "应用需要重启以完全应用导入操作，要继续吗？",
             PrimaryButtonText = "重启并继续",
             SecondaryButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        }.ShowAsync(TopLevel.GetTopLevel(this));
-        if (r != ContentDialogResult.Primary)
+            DefaultButton = FAContentDialogButton.Primary
+        }.ShowAsyncAuto(TopLevel.GetTopLevel(this));
+        if (r != FAContentDialogResult.Primary)
         {
             return;
         }
@@ -792,7 +806,7 @@ public partial class DataTransferPage : UserControl
 
     private void ButtonFinish_OnClick(object? sender, RoutedEventArgs e)
     {
-        (TopLevel.GetTopLevel(this) as Window)?.Close();
+        this.FindAncestorOfType<DataTransferWindow>()?.Close();
     }
 
     private void ButtonNext_OnClick(object? sender, RoutedEventArgs e)
